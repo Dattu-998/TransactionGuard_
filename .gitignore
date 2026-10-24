@@ -48,3 +48,6 @@ ehthumbs.db
 Thumbs.db
 
 mlflow.db
+frontend/node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
