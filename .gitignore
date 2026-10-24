@@ -32,7 +32,8 @@ artifacts/*
 !artifacts/model.joblib
 !artifacts/feature_engineer.joblib
 !artifacts/metadata.json
-!artifacts/schema.jsonreports/*
+!artifacts/schema.json
+reports/*
 !reports/.gitkeep
 mlruns/*
 !mlruns/.gitkeep

@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from contextlib import asynccontextmanager
 from io import BytesIO
@@ -47,9 +48,19 @@ async def lifespan(app: FastAPI):
     app.state.inference = None
 
 app = FastAPI(title=app_config.app_name, lifespan=lifespan)
+allowed_origins = [
+    "https://transactionguard-frontend-87m8ag5rn-dattu-998.vercel.app",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+allowed_origins.extend(
+    origin.strip()
+    for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=list(dict.fromkeys(allowed_origins)),
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],

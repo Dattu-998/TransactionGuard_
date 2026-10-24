@@ -1,11 +1,14 @@
 import os
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
+
+ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 class Config(BaseSettings):
-    BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
+    BASE_DIR: Path = ROOT
     DATA_DIR: Path = BASE_DIR / "data"
     RAW_DATA_PATH: Path = DATA_DIR / "raw" / "creditcard.csv"
     PROCESSED_DATA_DIR: Path = DATA_DIR / "processed"
@@ -20,6 +23,14 @@ class Config(BaseSettings):
 
     FN_COST: float = 1000.0
     FP_COST: float = 10.0
+
+    @field_validator("ARTIFACT_DIR", mode="before")
+    @classmethod
+    def resolve_artifact_dir(cls, value: str | Path) -> Path:
+        path = Path(value)
+        if not path.is_absolute():
+            path = ROOT / path
+        return path.resolve()
 
 config = Config()
 config.DATA_DIR.mkdir(parents=True, exist_ok=True)
