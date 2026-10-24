@@ -47,7 +47,6 @@ class InferenceService:
             "model": self.artifact_dir / "model.joblib",
             "feature engineer": self.artifact_dir / "feature_engineer.joblib",
             "metadata": self.artifact_dir / "metadata.json",
-            "schema": self.artifact_dir / "schema.json",
         }
         absent = [name for name, path in paths.items() if not path.exists()]
         if absent:
@@ -56,7 +55,15 @@ class InferenceService:
             self.model = joblib.load(paths["model"])
             self.feature_engineer = joblib.load(paths["feature engineer"])
             self.metadata = json.loads(paths["metadata"].read_text(encoding="utf-8"))
-            self.schema = json.loads(paths["schema"].read_text(encoding="utf-8"))
+            schema_path = self.artifact_dir / "schema.json"
+            if schema_path.exists():
+                self.schema = json.loads(schema_path.read_text(encoding="utf-8"))
+            else:
+                feature_names = self.metadata.get("feature_names") or getattr(
+                    self.feature_engineer, "feature_names_in_", None
+                )
+                if feature_names:
+                    self.schema = {str(name): "float64" for name in feature_names}
         except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
             raise InferenceError("Unable to load model artifacts.") from exc
         if not self.schema:

@@ -44,3 +44,9 @@ def test_risk_bands_and_missing_artifacts(tmp_path):
     assert [risk_category(value) for value in (0.1, 0.2, 0.6)] == ["Low", "Medium", "High"]
     with pytest.raises(InferenceError, match="Missing model"):
         InferenceService(tmp_path).load()
+
+
+def test_load_derives_schema_when_optional_schema_file_is_missing(artifact_dir):
+    (artifact_dir / "schema.json").unlink()
+    service = InferenceService(artifact_dir).load()
+    assert service.details.feature_names == ["F1", "F2"]
