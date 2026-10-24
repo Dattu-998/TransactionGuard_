@@ -11,6 +11,12 @@ from app.config import app_config
 from app.main import app, predictor_instance
 from transactionguard.features.engineering import FeatureEngineer
 
+ALLOWED_CORS_ORIGINS = [
+    "https://transactionguard-frontend-h7njdhmeq-dattu-998.vercel.app",
+    "https://transactionguard-frontend-neon.vercel.app",
+    "http://localhost:5173",
+]
+
 
 @pytest.fixture(autouse=True)
 def mock_artifacts(tmp_path):
@@ -30,6 +36,33 @@ def mock_artifacts(tmp_path):
     with open(tmp_path / "schema.json", "w") as f:
         json.dump({"F1": "float64", "F2": "float64"}, f)
     return tmp_path
+
+
+@pytest.mark.parametrize("origin", ALLOWED_CORS_ORIGINS)
+@pytest.mark.parametrize("path", ["/api/health", "/api/model-info"])
+def test_cors_preflight_for_allowed_origins(origin, path):
+    with TestClient(app) as test_client:
+        response = test_client.options(
+            path,
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == origin
+
+
+@pytest.mark.parametrize("origin", ALLOWED_CORS_ORIGINS)
+@pytest.mark.parametrize("path", ["/api/health", "/api/model-info"])
+def test_cors_get_for_allowed_origins(origin, path):
+    with TestClient(app) as test_client:
+        response = test_client.get(path, headers={"Origin": origin})
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == origin
+
 
 def test_health_check_with_model():
     with TestClient(app) as test_client:

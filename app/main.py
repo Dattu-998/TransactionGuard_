@@ -49,7 +49,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=app_config.app_name, lifespan=lifespan)
 allowed_origins = [
-    "https://transactionguard-frontend-87m8ag5rn-dattu-998.vercel.app",
+    "https://transactionguard-frontend-h7njdhmeq-dattu-998.vercel.app",
+    "https://transactionguard-frontend-neon.vercel.app",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
