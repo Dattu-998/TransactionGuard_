@@ -1,6 +1,28 @@
 # TransactionGuard: Imbalanced Fraud Detection
 
-## Browser application
+## Primary local web application
+
+TransactionGuard's primary interface is a custom React, TypeScript, Three.js, and FastAPI application. It provides a responsive 3D product experience, CSV/Excel batch analysis, single-transaction review, local result export, and a synthetic-data model-intelligence view. The legacy Streamlit dashboard remains available in `app.py` for now, but is not required by the new application.
+
+Start the API in one PowerShell terminal:
+
+```powershell
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+Start the web interface in another:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open the Vite address printed in the terminal (normally `http://localhost:5173`). The frontend expects the local API at `http://localhost:8000/api`; override that only when needed with `VITE_API_BASE_URL`.
+
+## Legacy Streamlit browser application
 
 TransactionGuard includes a local Streamlit dashboard for reviewing model estimates. It supports CSV and Excel batch uploads, a single-transaction form, downloadable results, session-only dashboards, and the available saved evaluation report.
 

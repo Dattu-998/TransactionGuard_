@@ -25,14 +25,16 @@ from transactionguard.inference import InferenceError, InferenceService
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 FRAUD, LEGIT = "Potential Fraud", "Likely Legitimate"
 
-# One accent (navy), one alert colour (muted red), neutrals for everything else.
-NAVY = "#1D3557"
-RED = "#B42318"
-INK = "#101828"
-MUTED = "#667085"
-LINE = "#E4E7EC"
-PALETTE = {FRAUD: RED, LEGIT: "#9FB3C8"}
-RISK_COLORS = {"Low": "#9FB3C8", "Medium": "#486581", "High": RED}
+# Premium dark fintech palette. The inference layer deliberately does not depend on these values.
+NAVY = "#8B5CF6"
+CYAN = "#67E8F9"
+RED = "#F87171"
+GREEN = "#4ADE80"
+INK = "#F4F5FA"
+MUTED = "#9298AC"
+LINE = "rgba(196,181,253,.16)"
+PALETTE = {FRAUD: RED, LEGIT: GREEN}
+RISK_COLORS = {"Low": GREEN, "Medium": "#FBBF24", "High": RED}
 
 PAGES = ["Overview", "Bulk analysis", "Single transaction", "Model performance", "About"]
 
@@ -45,35 +47,34 @@ st.set_page_config(page_title="TransactionGuard", page_icon="🛡️", layout="w
 def inject_style() -> None:
     st.markdown(
         f"""<style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
         #MainMenu, footer {{visibility:hidden;}}
-        header[data-testid="stHeader"] {{background:transparent;}}
-        .stApp {{background:#F7F8FA; color:{INK};
-                 font-family:Inter,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;}}
-        .block-container {{padding-top:2.2rem; max-width:1240px;}}
-        h1,h2,h3,h4 {{color:{INK}; letter-spacing:-.01em;}}
-
-        [data-testid="stSidebar"] {{background:#FFFFFF; border-right:1px solid {LINE};}}
-        .tg-brand {{font-size:1.05rem; font-weight:650; color:{INK}; letter-spacing:-.01em;}}
-        .tg-brand-sub {{font-size:.78rem; color:{MUTED}; margin-top:2px;}}
-
-        .tg-title {{font-size:1.65rem; font-weight:650; color:{INK}; margin:0; letter-spacing:-.02em;}}
-        .tg-subtitle {{color:{MUTED}; font-size:.95rem; margin:.25rem 0 1.1rem 0;}}
-        .tg-rule {{border:0; border-top:1px solid {LINE}; margin:0 0 1.4rem 0;}}
-
-        .tg-strip {{display:flex; background:#fff; border:1px solid {LINE}; border-radius:8px;
-                    margin-bottom:1.4rem; overflow:hidden;}}
-        .tg-cell {{flex:1; padding:16px 20px; border-right:1px solid {LINE}; min-width:0;}}
+        header[data-testid="stHeader"] {{background:rgba(8,10,18,.72);backdrop-filter:blur(14px);}}
+        .stApp {{background:radial-gradient(circle at 72% -10%,#2a1d5d 0,transparent 28%),radial-gradient(circle at 10% 38%,#10243c 0,transparent 24%),#080A12;color:{INK};font-family:Inter,-apple-system,"Segoe UI",sans-serif;}}
+        .block-container {{padding-top:2.2rem;padding-bottom:3rem;max-width:1320px;}}
+        h1,h2,h3,h4 {{color:{INK};font-family:"Space Grotesk",Inter,sans-serif;letter-spacing:-.035em;}}
+        [data-testid="stSidebar"] {{background:linear-gradient(180deg,#101326,#090b14);border-right:1px solid {LINE};}}
+        [data-testid="stSidebar"] > div:first-child {{padding-top:1.5rem;}}
+        .tg-brand {{font:700 1.12rem "Space Grotesk",sans-serif;color:#fff;letter-spacing:-.04em;}}
+        .tg-brand:before {{content:"✦";display:inline-grid;place-items:center;width:28px;height:28px;margin-right:9px;border-radius:9px;background:linear-gradient(135deg,{NAVY},{CYAN});color:#080A12;font-size:.85rem;}}
+        .tg-brand-sub {{font-size:.7rem;color:{MUTED};margin:8px 0 18px 38px;text-transform:uppercase;letter-spacing:.1em;}}
+        [data-testid="stSidebar"] [role="radiogroup"] label {{border:1px solid transparent;border-radius:10px;padding:7px 8px;margin:2px 0;transition:.2s;}}
+        [data-testid="stSidebar"] [role="radiogroup"] label:hover {{background:rgba(139,92,246,.12);border-color:rgba(196,181,253,.18);}}
+        .tg-title {{font:700 clamp(1.8rem,3vw,2.45rem) "Space Grotesk",sans-serif;color:{INK};margin:0;letter-spacing:-.05em;}}
+        .tg-subtitle {{color:{MUTED};font-size:.95rem;margin:.38rem 0 1.1rem;max-width:720px;line-height:1.6;}}
+        .tg-rule {{border:0;border-top:1px solid {LINE};margin:0 0 1.4rem;}}
+        .tg-strip {{display:flex;background:linear-gradient(135deg,rgba(25,29,51,.92),rgba(14,17,33,.8));border:1px solid {LINE};border-radius:14px;margin-bottom:1.4rem;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.16);}}
+        .tg-cell {{flex:1;padding:17px 20px;border-right:1px solid {LINE};min-width:0;}}
         .tg-cell:last-child {{border-right:0;}}
         .tg-label {{font-size:.7rem; letter-spacing:.08em; text-transform:uppercase; color:{MUTED}; font-weight:600;}}
-        .tg-value {{font-size:1.6rem; font-weight:600; color:{INK}; margin-top:4px;
+        .tg-value {{font:600 1.6rem "Space Grotesk",sans-serif;color:{INK};margin-top:4px;
                     font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}}
         .tg-sub {{font-size:.78rem; color:{MUTED}; margin-top:2px;}}
 
         .tg-section {{font-size:.72rem; letter-spacing:.08em; text-transform:uppercase;
                       color:{MUTED}; font-weight:600; margin:1.2rem 0 .5rem 0;}}
 
-        .tg-callout {{background:#fff; border:1px solid {LINE}; border-left:4px solid {MUTED};
-                      border-radius:6px; padding:14px 18px; margin-bottom:1rem;}}
+        .tg-callout {{background:linear-gradient(135deg,rgba(28,33,57,.96),rgba(15,18,34,.9));border:1px solid {LINE};border-left:4px solid {MUTED};border-radius:14px;padding:17px 20px;margin-bottom:1rem;box-shadow:0 15px 35px rgba(0,0,0,.16);}}
         .tg-callout-title {{font-size:1.15rem; font-weight:650;}}
         .tg-callout-body {{color:{MUTED}; font-size:.88rem; margin-top:2px;}}
 
@@ -83,13 +84,24 @@ def inject_style() -> None:
         div[data-testid="stTabs"] button[role="tab"] {{font-weight:550; color:{MUTED};}}
         div[data-testid="stTabs"] button[aria-selected="true"] {{color:{INK};}}
         div.stButton > button, div.stDownloadButton > button, div.stFormSubmitButton > button {{
-            border-radius:6px; font-weight:550; border:1px solid #D0D5DD;}}
+            border-radius:9px;font-weight:600;border:1px solid {LINE};background:#1a1f36;color:{INK};transition:transform .2s,box-shadow .2s;}}
         div.stButton > button[kind="primary"], div.stFormSubmitButton > button[kind="primary"] {{
-            background:{NAVY}; border-color:{NAVY}; color:#fff;}}
+            background:linear-gradient(135deg,{NAVY},#6D4EDC);border-color:{NAVY};color:#fff;box-shadow:0 8px 22px rgba(139,92,246,.25);}}
         div.stButton > button[kind="primary"]:hover, div.stFormSubmitButton > button[kind="primary"]:hover {{
-            background:#14263F; border-color:#14263F; color:#fff;}}
-        [data-testid="stFileUploaderDropzone"] {{background:#fff; border:1px dashed #D0D5DD; border-radius:8px;}}
-        [data-testid="stMetric"] {{background:#fff; border:1px solid {LINE}; border-radius:8px; padding:12px 16px;}}
+            background:#7552E3;border-color:#A78BFA;color:#fff;transform:translateY(-1px);}}
+        [data-testid="stFileUploaderDropzone"] {{background:linear-gradient(135deg,rgba(28,33,57,.8),rgba(12,15,28,.7));border:1px dashed rgba(196,181,253,.38);border-radius:14px;padding:1.5rem;}}
+        [data-testid="stMetric"] {{background:#171b30;border:1px solid {LINE};border-radius:12px;padding:12px 16px;}}
+        [data-testid="stDataFrame"] {{border:1px solid {LINE};border-radius:12px;overflow:hidden;}}
+        .tg-hero {{position:relative;overflow:hidden;min-height:390px;padding:clamp(25px,5vw,64px);border:1px solid rgba(196,181,253,.2);border-radius:24px;background:linear-gradient(120deg,rgba(24,26,52,.98),rgba(12,15,30,.88));box-shadow:0 30px 90px rgba(0,0,0,.35);margin-bottom:1.6rem;}}
+        .tg-hero:before {{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(196,181,253,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(196,181,253,.045) 1px,transparent 1px);background-size:36px 36px;mask-image:linear-gradient(90deg,#000,transparent);}}
+        .tg-eyebrow {{position:relative;color:{CYAN};font-size:.7rem;font-weight:700;letter-spacing:.15em;text-transform:uppercase;}}
+        .tg-hero h1 {{position:relative;max-width:600px;font-size:clamp(2.8rem,5.2vw,5rem);line-height:.98;margin:.8rem 0 1rem;}}
+        .tg-hero p {{position:relative;max-width:530px;color:#B8BED2;font-size:1rem;line-height:1.7;}}
+        .tg-orbit {{position:absolute;right:8%;top:50%;width:250px;height:250px;transform:translateY(-50%) rotateX(62deg) rotateZ(-18deg);border:1px solid rgba(103,232,249,.5);border-radius:50%;box-shadow:0 0 45px rgba(103,232,249,.16),inset 0 0 34px rgba(139,92,246,.25);animation:tgspin 15s linear infinite;}}
+        .tg-orbit:before,.tg-orbit:after {{content:"";position:absolute;inset:30px;border:1px solid rgba(196,181,253,.52);border-radius:50%;}} .tg-orbit:after {{inset:70px;background:radial-gradient(circle at 34% 30%,#fff 0 2%,{CYAN} 7%,{NAVY} 34%,rgba(15,18,44,.8) 68%);box-shadow:0 0 42px rgba(139,92,246,.9);}}
+        .tg-node {{position:absolute;right:25%;top:28%;width:10px;height:10px;border-radius:50%;background:{CYAN};box-shadow:0 0 20px {CYAN};animation:tgfloat 4s ease-in-out infinite;}}
+        @keyframes tgspin {{to {{transform:translateY(-50%) rotateX(62deg) rotateZ(342deg);}}}} @keyframes tgfloat {{50% {{transform:translateY(22px);}}}}
+        @media (prefers-reduced-motion:reduce) {{*,*:before,*:after {{animation-duration:.01ms!important;transition-duration:.01ms!important;}}}} @media(max-width:760px) {{.tg-orbit,.tg-node {{opacity:.28;right:-15%;}}.tg-hero {{min-height:360px;}}.block-container {{padding-left:1rem;padding-right:1rem;}}}}
         </style>""",
         unsafe_allow_html=True,
     )
@@ -101,6 +113,11 @@ def page_header(title: str, subtitle: str) -> None:
         f'<div class="tg-subtitle">{escape(subtitle)}</div><hr class="tg-rule">',
         unsafe_allow_html=True,
     )
+
+
+def navigate(page: str) -> None:
+    """Callback-safe navigation from overview actions."""
+    st.session_state.nav = page
 
 
 def strip(items: list[tuple]) -> None:
@@ -127,17 +144,17 @@ def chip(text: str, color: str) -> str:
 
 def style_fig(fig: go.Figure, title: str = "", height: int = 320) -> go.Figure:
     fig.update_layout(
-        template="plotly_white",
+        template="plotly_dark",
         title=dict(text=title, font=dict(size=13, color=INK), x=0, xanchor="left"),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Inter, -apple-system, Segoe UI, Roboto, sans-serif", size=12, color="#344054"),
+        font=dict(family="Inter, -apple-system, Segoe UI, Roboto, sans-serif", size=12, color="#CBD5E1"),
         height=height,
         margin=dict(l=8, r=8, t=44, b=8),
         legend=dict(orientation="h", y=-0.22, x=0, title=None),
     )
-    fig.update_xaxes(gridcolor="#F2F4F7", linecolor=LINE, zeroline=False)
-    fig.update_yaxes(gridcolor="#F2F4F7", linecolor=LINE, zeroline=False)
+    fig.update_xaxes(gridcolor="rgba(196,181,253,.08)", linecolor=LINE, zeroline=False)
+    fig.update_yaxes(gridcolor="rgba(196,181,253,.08)", linecolor=LINE, zeroline=False)
     return fig
 
 
@@ -314,18 +331,32 @@ def download_row(frame: pd.DataFrame, key: str, suffix: str = "") -> None:
 # Pages
 # --------------------------------------------------------------------------- #
 def overview(service: InferenceService) -> None:
-    page_header("Overview", "Fraud-screening estimates for analyst review. A flag is a prompt to investigate, not a finding.")
     results = st.session_state.get("results")
     threshold = service.details.threshold
 
     if results is None:
+        st.markdown(
+            '''<section class="tg-hero"><div class="tg-eyebrow">AI-assisted fraud screening</div>
+            <h1>Financial intelligence.<br>Built for trust.</h1>
+            <p>Screen transaction data with a transparent, local review workflow. Every flag is an estimate for an analyst to investigate—not a finding of fraud.</p>
+            <div class="tg-orbit"></div><div class="tg-node"></div></section>''',
+            unsafe_allow_html=True,
+        )
+        a, b, _ = st.columns([1.35, 1.55, 3])
+        a.button("Analyse transactions", type="primary", use_container_width=True,
+                 on_click=navigate, args=("Bulk analysis",))
+        b.button("Explore model insights", use_container_width=True,
+                 on_click=navigate, args=("Model performance",))
+        section("Model at a glance")
         strip([
             ("Model", service.details.name, f"version {service.details.version}"),
             ("Decision threshold", f"{threshold:.4%}", "probability cut-off"),
             ("Input features", len(service.details.feature_names), "numeric fields"),
         ])
-        st.info("No transactions analysed in this session. Use Bulk analysis to score a file, or Single transaction to score one row.")
+        st.info("No transactions have been analysed in this session. Start with a CSV/Excel file or examine one transaction at a time.")
         return
+
+    page_header("Command centre", "Session-level fraud-screening estimates for analyst review. A flag is a prompt to investigate, not a finding.")
 
     total = len(results)
     flagged = int((results["Predicted Class"] == FRAUD).sum())
@@ -348,7 +379,7 @@ def overview(service: InferenceService) -> None:
 
 
 def bulk_analysis(service: InferenceService) -> None:
-    page_header("Bulk analysis", "Score a CSV or Excel file. Files stay in this browser session and are not stored.")
+    page_header("Bulk analysis", "A private, high-signal workspace for CSV and Excel transaction review. Files remain in this browser session.")
     left, right = st.columns([4, 1])
     with right:
         st.download_button("Input template (CSV)", template_bytes(service.details.feature_names),
@@ -491,7 +522,7 @@ def single_transaction(service: InferenceService) -> None:
 
 
 def performance(service: InferenceService) -> None:
-    page_header("Model performance", "Evaluation on a held-out test set.")
+    page_header("Model intelligence", "A transparent view of the saved model's held-out evaluation.")
     st.warning("Synthetic-data evaluation. These figures are not live performance or validation on real financial transactions.")
     metrics_path = config.REPORT_DIR / "test_metrics.json"
     if not metrics_path.exists():
@@ -556,7 +587,7 @@ def main() -> None:
         unsafe_allow_html=True,
     )
     st.sidebar.write("")
-    page = st.sidebar.radio("Navigate", PAGES, label_visibility="collapsed")
+    page = st.sidebar.radio("Navigate", PAGES, label_visibility="collapsed", key="nav")
     st.sidebar.divider()
     results = st.session_state.get("results")
     if results is not None:
