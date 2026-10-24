@@ -1,12 +1,14 @@
-"""TransactionGuard — advanced local Streamlit fraud-review interface."""
+"""TransactionGuard — local fraud-review workspace (Streamlit)."""
 
 from __future__ import annotations
 
 import sys
 from datetime import datetime
+from html import escape
 from io import BytesIO
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -17,85 +19,130 @@ SRC_DIR = ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+from transactionguard.config import config
 from transactionguard.inference import InferenceError, InferenceService
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 FRAUD, LEGIT = "Potential Fraud", "Likely Legitimate"
-PALETTE = {FRAUD: "#F43F5E", LEGIT: "#10B981"}
-RISK_COLORS = {"Low": "#10B981", "Medium": "#F59E0B", "High": "#F43F5E"}
-ACCENT = "#8B5CF6"
 
-PAGES = {
-    "📊  Overview": "overview",
-    "📂  Bulk Analysis": "bulk",
-    "🔍  Single Transaction": "single",
-    "📈  Model Performance": "performance",
-    "ℹ️  About": "about",
-}
+# One accent (navy), one alert colour (muted red), neutrals for everything else.
+NAVY = "#1D3557"
+RED = "#B42318"
+INK = "#101828"
+MUTED = "#667085"
+LINE = "#E4E7EC"
+PALETTE = {FRAUD: RED, LEGIT: "#9FB3C8"}
+RISK_COLORS = {"Low": "#9FB3C8", "Medium": "#486581", "High": RED}
+
+PAGES = ["Overview", "Bulk analysis", "Single transaction", "Model performance", "About"]
 
 st.set_page_config(page_title="TransactionGuard", page_icon="🛡️", layout="wide")
 
 
 # --------------------------------------------------------------------------- #
-# Styling helpers
+# Styling
 # --------------------------------------------------------------------------- #
 def inject_style() -> None:
     st.markdown(
-        """<style>
-        #MainMenu, footer {visibility:hidden;}
-        .stApp {background: radial-gradient(1200px 600px at 10% -10%, #1b2250 0%, #0B1020 55%);
-                color:#F8FAFC;}
-        .block-container {padding-top:1.6rem; max-width:1300px;}
-        [data-testid="stSidebar"] {background:#0e1424; border-right:1px solid #1f2a44;}
-        .tg-brand {font-size:1.35rem; font-weight:800; letter-spacing:.3px;}
-        .tg-brand span {color:#8B5CF6;}
-        .tg-hero {background:linear-gradient(135deg,#312e81 0%,#6d28d9 55%,#be185d 120%);
-                  border-radius:18px; padding:26px 30px; margin-bottom:18px;
-                  box-shadow:0 10px 30px rgba(109,40,217,.25);}
-        .tg-hero h1 {margin:0; font-size:2rem;}
-        .tg-hero p {margin:.35rem 0 0 0; color:#E0E7FF; font-size:.98rem;}
-        .tg-card {background:#141B2D; border:1px solid #283552; border-radius:14px;
-                  padding:16px 18px; height:100%;
-                  transition:transform .15s ease, border-color .15s ease;}
-        .tg-card:hover {transform:translateY(-2px); border-color:#8B5CF6;}
-        .tg-label {color:#94A3B8; font-size:.8rem; text-transform:uppercase;
-                   letter-spacing:.06em; margin-bottom:.25rem;}
-        .tg-value {font-size:1.8rem; font-weight:800; line-height:1.15;}
-        .tg-sub {color:#94A3B8; font-size:.8rem; margin-top:.2rem;}
-        .tg-pill {display:inline-block; padding:3px 12px; border-radius:999px;
-                  font-size:.78rem; font-weight:700; border:1px solid;}
-        .tg-verdict {border-radius:14px; padding:18px 22px; font-size:1.3rem; font-weight:800;}
-        .tg-muted {color:#94A3B8;}
-        div[data-testid="stTabs"] button {font-weight:600;}
-        div.stButton > button[kind="primary"], div.stDownloadButton > button {border-radius:10px;}
+        f"""<style>
+        #MainMenu, footer {{visibility:hidden;}}
+        header[data-testid="stHeader"] {{background:transparent;}}
+        .stApp {{background:#F7F8FA; color:{INK};
+                 font-family:Inter,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;}}
+        .block-container {{padding-top:2.2rem; max-width:1240px;}}
+        h1,h2,h3,h4 {{color:{INK}; letter-spacing:-.01em;}}
+
+        [data-testid="stSidebar"] {{background:#FFFFFF; border-right:1px solid {LINE};}}
+        .tg-brand {{font-size:1.05rem; font-weight:650; color:{INK}; letter-spacing:-.01em;}}
+        .tg-brand-sub {{font-size:.78rem; color:{MUTED}; margin-top:2px;}}
+
+        .tg-title {{font-size:1.65rem; font-weight:650; color:{INK}; margin:0; letter-spacing:-.02em;}}
+        .tg-subtitle {{color:{MUTED}; font-size:.95rem; margin:.25rem 0 1.1rem 0;}}
+        .tg-rule {{border:0; border-top:1px solid {LINE}; margin:0 0 1.4rem 0;}}
+
+        .tg-strip {{display:flex; background:#fff; border:1px solid {LINE}; border-radius:8px;
+                    margin-bottom:1.4rem; overflow:hidden;}}
+        .tg-cell {{flex:1; padding:16px 20px; border-right:1px solid {LINE}; min-width:0;}}
+        .tg-cell:last-child {{border-right:0;}}
+        .tg-label {{font-size:.7rem; letter-spacing:.08em; text-transform:uppercase; color:{MUTED}; font-weight:600;}}
+        .tg-value {{font-size:1.6rem; font-weight:600; color:{INK}; margin-top:4px;
+                    font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}}
+        .tg-sub {{font-size:.78rem; color:{MUTED}; margin-top:2px;}}
+
+        .tg-section {{font-size:.72rem; letter-spacing:.08em; text-transform:uppercase;
+                      color:{MUTED}; font-weight:600; margin:1.2rem 0 .5rem 0;}}
+
+        .tg-callout {{background:#fff; border:1px solid {LINE}; border-left:4px solid {MUTED};
+                      border-radius:6px; padding:14px 18px; margin-bottom:1rem;}}
+        .tg-callout-title {{font-size:1.15rem; font-weight:650;}}
+        .tg-callout-body {{color:{MUTED}; font-size:.88rem; margin-top:2px;}}
+
+        .tg-chip {{display:inline-block; padding:1px 9px; border-radius:4px; font-size:.75rem;
+                   font-weight:600; border:1px solid; vertical-align:middle;}}
+
+        div[data-testid="stTabs"] button[role="tab"] {{font-weight:550; color:{MUTED};}}
+        div[data-testid="stTabs"] button[aria-selected="true"] {{color:{INK};}}
+        div.stButton > button, div.stDownloadButton > button, div.stFormSubmitButton > button {{
+            border-radius:6px; font-weight:550; border:1px solid #D0D5DD;}}
+        div.stButton > button[kind="primary"], div.stFormSubmitButton > button[kind="primary"] {{
+            background:{NAVY}; border-color:{NAVY}; color:#fff;}}
+        div.stButton > button[kind="primary"]:hover, div.stFormSubmitButton > button[kind="primary"]:hover {{
+            background:#14263F; border-color:#14263F; color:#fff;}}
+        [data-testid="stFileUploaderDropzone"] {{background:#fff; border:1px dashed #D0D5DD; border-radius:8px;}}
+        [data-testid="stMetric"] {{background:#fff; border:1px solid {LINE}; border-radius:8px; padding:12px 16px;}}
         </style>""",
         unsafe_allow_html=True,
     )
 
 
-def kpi(label: str, value, sub: str = "", color: str = "#F8FAFC") -> str:
-    return (
-        f'<div class="tg-card"><div class="tg-label">{label}</div>'
-        f'<div class="tg-value" style="color:{color}">{value}</div>'
-        f'<div class="tg-sub">{sub}</div></div>'
+def page_header(title: str, subtitle: str) -> None:
+    st.markdown(
+        f'<div class="tg-title">{escape(title)}</div>'
+        f'<div class="tg-subtitle">{escape(subtitle)}</div><hr class="tg-rule">',
+        unsafe_allow_html=True,
     )
 
 
-def hero(title: str, subtitle: str) -> None:
-    st.markdown(f'<div class="tg-hero"><h1>{title}</h1><p>{subtitle}</p></div>', unsafe_allow_html=True)
+def strip(items: list[tuple]) -> None:
+    """Single bordered metric strip. items: (label, value, sub[, colour])."""
+    cells = ""
+    for item in items:
+        label, value, sub = item[0], item[1], item[2] if len(item) > 2 else ""
+        color = item[3] if len(item) > 3 else INK
+        cells += (
+            f'<div class="tg-cell"><div class="tg-label">{escape(str(label))}</div>'
+            f'<div class="tg-value" style="color:{color}">{escape(str(value))}</div>'
+            f'<div class="tg-sub">{escape(str(sub))}</div></div>'
+        )
+    st.markdown(f'<div class="tg-strip">{cells}</div>', unsafe_allow_html=True)
 
 
-def style_fig(fig: go.Figure, title: str, height: int = 340) -> go.Figure:
+def section(label: str) -> None:
+    st.markdown(f'<div class="tg-section">{escape(label)}</div>', unsafe_allow_html=True)
+
+
+def chip(text: str, color: str) -> str:
+    return f'<span class="tg-chip" style="color:{color};border-color:{color}">{escape(text)}</span>'
+
+
+def style_fig(fig: go.Figure, title: str = "", height: int = 320) -> go.Figure:
     fig.update_layout(
-        template="plotly_dark",
-        title=dict(text=title, font=dict(size=15)),
+        template="plotly_white",
+        title=dict(text=title, font=dict(size=13, color=INK), x=0, xanchor="left"),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, -apple-system, Segoe UI, Roboto, sans-serif", size=12, color="#344054"),
         height=height,
-        margin=dict(l=10, r=10, t=50, b=10),
-        legend=dict(orientation="h", y=-0.2),
+        margin=dict(l=8, r=8, t=44, b=8),
+        legend=dict(orientation="h", y=-0.22, x=0, title=None),
     )
+    fig.update_xaxes(gridcolor="#F2F4F7", linecolor=LINE, zeroline=False)
+    fig.update_yaxes(gridcolor="#F2F4F7", linecolor=LINE, zeroline=False)
     return fig
+
+
+def show(fig: go.Figure) -> None:
+    st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False})
 
 
 # --------------------------------------------------------------------------- #
@@ -103,7 +150,7 @@ def style_fig(fig: go.Figure, title: str, height: int = 340) -> go.Figure:
 # --------------------------------------------------------------------------- #
 @st.cache_resource(show_spinner=False)
 def get_service() -> InferenceService:
-    return InferenceService(ROOT / "artifacts").load()
+    return InferenceService(config.ARTIFACT_DIR).load()
 
 
 def read_upload(uploaded) -> pd.DataFrame:
@@ -137,104 +184,127 @@ def export_excel(frame: pd.DataFrame) -> bytes:
     return output.getvalue()
 
 
-def risk_pill(risk: str) -> str:
-    color = RISK_COLORS.get(str(risk), "#94A3B8")
-    return f'<span class="tg-pill" style="color:{color};border-color:{color}">{risk} risk</span>'
+def prob_column(frame: pd.DataFrame) -> pd.DataFrame:
+    """Copy of frame with Fraud Probability expressed as 0-100 for display only."""
+    shown = frame.copy()
+    shown["Fraud Probability"] = shown["Fraud Probability"] * 100
+    return shown
+
+
+PROB_CONFIG = {
+    "Fraud Probability": st.column_config.ProgressColumn(
+        "Fraud probability (%)", min_value=0, max_value=100, format="%.3f"
+    )
+}
 
 
 # --------------------------------------------------------------------------- #
 # Charts
 # --------------------------------------------------------------------------- #
-def gauge(probability: float, threshold: float) -> go.Figure:
-    fig = go.Figure(
-        go.Indicator(
-            mode="gauge+number",
-            value=probability * 100,
-            number={"suffix": "%", "valueformat": ".2f"},
-            gauge={
-                "axis": {"range": [0, 100]},
-                "bar": {"color": "#F8FAFC", "thickness": 0.25},
-                "steps": [
-                    {"range": [0, 20], "color": "#065f46"},
-                    {"range": [20, 60], "color": "#92400e"},
-                    {"range": [60, 100], "color": "#9f1239"},
-                ],
-                "threshold": {"line": {"color": ACCENT, "width": 4}, "value": min(threshold * 100, 100)},
-            },
-        )
-    )
-    return style_fig(fig, "Fraud probability (purple line = decision threshold)", 300)
+def probability_bar(probability: float, threshold: float) -> go.Figure:
+    """Horizontal scale 0-100% with risk bands, the score and the decision threshold."""
+    pct, thr = probability * 100, min(threshold * 100, 100)
+    fig = go.Figure()
+    for lo, hi, color in [(0, 20, "#EEF2F6"), (20, 60, "#DDE5EE"), (60, 100, "#F4D9D6")]:
+        fig.add_shape(type="rect", x0=lo, x1=hi, y0=-0.5, y1=0.5, fillcolor=color, line_width=0, layer="below")
+    fig.add_trace(go.Bar(x=[pct], y=[""], orientation="h", width=0.28,
+                         marker_color=RED if probability >= threshold else NAVY,
+                         hovertemplate="%{x:.3f}%<extra></extra>"))
+    fig.add_shape(type="line", x0=thr, x1=thr, y0=-0.5, y1=0.5, line=dict(color=INK, width=2, dash="dot"))
+    fig.add_annotation(x=thr, y=0.5, text="threshold", showarrow=False, yshift=10, font=dict(size=11, color=MUTED))
+    for x, label in [(10, "Low"), (40, "Medium"), (80, "High")]:
+        fig.add_annotation(x=x, y=-0.5, text=label, showarrow=False, yshift=-12, font=dict(size=11, color=MUTED))
+    fig.update_xaxes(range=[0, 100], ticksuffix="%", showgrid=False)
+    fig.update_yaxes(showticklabels=False, showgrid=False, range=[-0.5, 0.5])
+    return style_fig(fig, "", 150).update_layout(margin=dict(l=8, r=8, t=24, b=34), showlegend=False)
 
 
 def result_charts(results: pd.DataFrame, threshold: float) -> None:
-    left, right = st.columns(2)
+    left, right = st.columns([3, 2])
     with left:
-        counts = results["Predicted Class"].value_counts().rename_axis("Prediction").reset_index(name="Count")
-        fig = px.pie(counts, names="Prediction", values="Count", hole=0.6,
-                     color="Prediction", color_discrete_map=PALETTE)
-        st.plotly_chart(style_fig(fig, "Prediction outcomes"), use_container_width=True)
+        fig = px.histogram(results, x="Fraud Probability", nbins=40, color="Predicted Class",
+                           color_discrete_map=PALETTE, barmode="overlay", opacity=0.9)
+        fig.add_vline(x=threshold, line_dash="dot", line_color=INK,
+                      annotation_text="threshold", annotation_position="top")
+        fig.update_yaxes(type="log", title="Transactions (log)")
+        fig.update_xaxes(title="Fraud probability")
+        show(style_fig(fig, "Score distribution"))
     with right:
         if "Risk Category" in results:
-            risk = results["Risk Category"].value_counts().reindex(["Low", "Medium", "High"]).dropna()
+            risk = results["Risk Category"].value_counts().reindex(["Low", "Medium", "High"]).fillna(0)
             fig = px.bar(risk.rename_axis("Risk").reset_index(name="Count"), x="Risk", y="Count",
-                         color="Risk", color_discrete_map=RISK_COLORS)
+                         color="Risk", color_discrete_map=RISK_COLORS, text="Count")
+            fig.update_traces(texttemplate="%{text:,}", textposition="outside", cliponaxis=False)
             fig.update_layout(showlegend=False)
-            st.plotly_chart(style_fig(fig, "Risk bands"), use_container_width=True)
-
-    fig = px.histogram(results, x="Fraud Probability", nbins=40, color="Predicted Class",
-                       color_discrete_map=PALETTE, barmode="overlay", opacity=0.8)
-    fig.add_vline(x=threshold, line_dash="dash", line_color=ACCENT,
-                  annotation_text="threshold", annotation_position="top")
-    fig.update_yaxes(type="log", title="Count (log)")
-    st.plotly_chart(style_fig(fig, "Predicted fraud probability distribution"), use_container_width=True)
-
+            fig.update_yaxes(title=None)
+            fig.update_xaxes(title=None)
+            show(style_fig(fig, "Risk bands"))
     if "Amount" in results:
-        a, b = st.columns(2)
-        with a:
-            fig = px.box(results, x="Predicted Class", y="Amount", color="Predicted Class",
-                         color_discrete_map=PALETTE, points=False)
-            fig.update_layout(showlegend=False)
-            st.plotly_chart(style_fig(fig, "Amount by prediction"), use_container_width=True)
-        with b:
-            if "Time" in results:
-                sample = results.sample(min(len(results), 5000), random_state=0)
-                fig = px.scatter(sample, x="Time", y="Amount", color="Predicted Class",
-                                 color_discrete_map=PALETTE, opacity=0.7, hover_data=["Fraud Probability"])
-                st.plotly_chart(style_fig(fig, "Time vs amount (sampled to 5,000 rows)"), use_container_width=True)
+        fig = px.box(results, x="Amount", y="Predicted Class", color="Predicted Class",
+                     color_discrete_map=PALETTE, points=False, orientation="h")
+        fig.update_layout(showlegend=False)
+        fig.update_yaxes(title=None)
+        show(style_fig(fig, "Transaction amount by prediction", 240))
+
+
+def threshold_analysis(results: pd.DataFrame, model_threshold: float, flagged_now: int) -> None:
+    st.caption("Exploration only. This does not change the saved model, its threshold, or the predictions.")
+    probs = results["Fraud Probability"].to_numpy()
+    total = len(probs)
+    default = float(min(max(model_threshold * 100, 0.01), 100.0))
+    chosen = st.slider("Hypothetical threshold (%)", 0.01, 100.0, default, 0.01) / 100
+    n_flag = int((probs >= chosen).sum())
+    strip([
+        ("Flagged at this threshold", f"{n_flag:,}", f"{n_flag - flagged_now:+,} vs saved model"),
+        ("Flag rate", f"{n_flag / total:.2%}", "of processed rows"),
+        ("Saved model threshold", f"{model_threshold:.4%}", f"{flagged_now:,} flagged"),
+    ])
+    if "Class" in results and results["Class"].isin([0, 1]).all() and (results["Class"] == 1).any():
+        actual = results["Class"].to_numpy() == 1
+        pred = probs >= chosen
+        tp, fp, fn = int((pred & actual).sum()), int((pred & ~actual).sum()), int((~pred & actual).sum())
+        precision = tp / (tp + fp) if (tp + fp) else float("nan")
+        recall = tp / (tp + fn) if (tp + fn) else float("nan")
+        def review_cost(cut: float) -> float:
+            flagged = probs >= cut
+            return float((~flagged & actual).sum() * config.FN_COST + (flagged & ~actual).sum() * config.FP_COST)
+
+        cost_now, cost_saved = review_cost(chosen), review_cost(model_threshold)
+        section("Against the uploaded Class labels")
+        strip([
+            ("Precision", "n/a" if np.isnan(precision) else f"{precision:.2%}", f"{tp:,} true / {fp:,} false alerts"),
+            ("Recall", "n/a" if np.isnan(recall) else f"{recall:.2%}", f"{fn:,} missed of {tp + fn:,} labelled fraud"),
+            ("Expected cost", f"{cost_now:,.0f}", f"{config.FN_COST:,.0f} per miss · {config.FP_COST:,.0f} per false alert"),
+            ("Cost vs saved threshold", f"{cost_now - cost_saved:+,.0f}", "negative is cheaper"),
+        ])
+    grid = np.unique(np.concatenate([np.geomspace(1e-4, 1, 60), [chosen, model_threshold]]))
+    curve = pd.DataFrame({"Threshold": grid, "Flagged": [(probs >= g).sum() for g in grid]})
+    fig = px.line(curve, x="Threshold", y="Flagged", log_x=True, color_discrete_sequence=[NAVY])
+    fig.add_vline(x=chosen, line_dash="dot", line_color=RED)
+    fig.update_yaxes(title="Transactions flagged")
+    fig.update_xaxes(title="Threshold (log scale)", tickformat=".2%")
+    show(style_fig(fig, "Flagged transactions by threshold", 280))
 
 
 def results_table(results: pd.DataFrame, key: str) -> pd.DataFrame:
-    """Filterable results table. Returns the filtered frame."""
     f1, f2, f3 = st.columns([2, 2, 2])
-    classes = f1.multiselect("Class", [FRAUD, LEGIT], default=[FRAUD, LEGIT], key=f"{key}_cls")
-    min_prob = f2.slider("Min fraud probability (%)", 0.0, 100.0, 0.0, 0.5, key=f"{key}_prob")
-    sort_desc = f3.selectbox("Sort", ["Highest risk first", "Original order"], key=f"{key}_sort")
+    classes = f1.multiselect("Prediction", [FRAUD, LEGIT], default=[FRAUD, LEGIT], key=f"{key}_cls")
+    min_prob = f2.slider("Minimum fraud probability (%)", 0.0, 100.0, 0.0, 0.5, key=f"{key}_prob")
+    order = f3.selectbox("Order", ["Highest risk first", "Original order"], key=f"{key}_ord")
     view = results[results["Predicted Class"].isin(classes) & (results["Fraud Probability"] * 100 >= min_prob)]
-    if sort_desc == "Highest risk first":
+    if order == "Highest risk first":
         view = view.sort_values("Fraud Probability", ascending=False)
-    shown = view.copy()
-    shown["Fraud Probability"] = shown["Fraud Probability"] * 100
-    st.caption(f"Showing {len(view):,} of {len(results):,} rows")
-    st.dataframe(
-        shown,
-        use_container_width=True,
-        hide_index=True,
-        height=420,
-        column_config={
-            "Fraud Probability": st.column_config.ProgressColumn(
-                "Fraud Probability (%)", min_value=0, max_value=100, format="%.2f"
-            )
-        },
-    )
+    st.caption(f"{len(view):,} of {len(results):,} rows")
+    st.dataframe(prob_column(view), use_container_width=True, hide_index=True, height=420, column_config=PROB_CONFIG)
     return view
 
 
-def download_row(frame: pd.DataFrame, key: str, label_suffix: str = "") -> None:
-    a, b = st.columns(2)
-    a.download_button(f"⬇ Download CSV{label_suffix}", frame.to_csv(index=False).encode(),
+def download_row(frame: pd.DataFrame, key: str, suffix: str = "") -> None:
+    a, b, _ = st.columns([1, 1, 2])
+    a.download_button(f"Download CSV{suffix}", frame.to_csv(index=False).encode(),
                       "transactionguard_results.csv", "text/csv", key=f"{key}_csv", use_container_width=True)
     try:
-        b.download_button(f"⬇ Download Excel{label_suffix}", export_excel(frame),
+        b.download_button(f"Download Excel{suffix}", export_excel(frame),
                           "transactionguard_results.xlsx", key=f"{key}_xlsx", use_container_width=True)
     except InferenceError as exc:
         b.warning(str(exc))
@@ -244,55 +314,46 @@ def download_row(frame: pd.DataFrame, key: str, label_suffix: str = "") -> None:
 # Pages
 # --------------------------------------------------------------------------- #
 def overview(service: InferenceService) -> None:
-    hero("🛡️ TransactionGuard", "Local fraud-screening estimates for analyst review — never a confirmation of fraud.")
+    page_header("Overview", "Fraud-screening estimates for analyst review. A flag is a prompt to investigate, not a finding.")
     results = st.session_state.get("results")
     threshold = service.details.threshold
 
     if results is None:
-        c = st.columns(3)
-        c[0].markdown(kpi("Model", service.details.name, f"version {service.details.version}"), unsafe_allow_html=True)
-        c[1].markdown(kpi("Decision threshold", f"{threshold:.4%}", "probability cut-off"), unsafe_allow_html=True)
-        c[2].markdown(kpi("Input features", len(service.details.feature_names), "numeric fields"), unsafe_allow_html=True)
-        st.info("No transactions analyzed yet. Open **Bulk Analysis** to upload a file or **Single Transaction** to test one row.")
+        strip([
+            ("Model", service.details.name, f"version {service.details.version}"),
+            ("Decision threshold", f"{threshold:.4%}", "probability cut-off"),
+            ("Input features", len(service.details.feature_names), "numeric fields"),
+        ])
+        st.info("No transactions analysed in this session. Use Bulk analysis to score a file, or Single transaction to score one row.")
         return
 
     total = len(results)
     flagged = int((results["Predicted Class"] == FRAUD).sum())
     meta = st.session_state.get("results_meta", {})
-    cols = st.columns(5)
-    cols[0].markdown(kpi("Processed", f"{total:,}", meta.get("source", "")), unsafe_allow_html=True)
-    cols[1].markdown(kpi("Flagged", f"{flagged:,}", "for analyst review", "#F43F5E"), unsafe_allow_html=True)
-    cols[2].markdown(kpi("Likely legit", f"{total - flagged:,}", "", "#10B981"), unsafe_allow_html=True)
-    cols[3].markdown(kpi("Flag rate", f"{flagged / total:.2%}", ""), unsafe_allow_html=True)
-    cols[4].markdown(kpi("Max probability", f"{results['Fraud Probability'].max():.1%}", "highest single score", ACCENT), unsafe_allow_html=True)
-    st.write("")
-
-    tab_charts, tab_top, tab_whatif = st.tabs(["Charts", "Top risky transactions", "What-if threshold"])
-    with tab_charts:
+    strip([
+        ("Processed", f"{total:,}", meta.get("source", "")),
+        ("Flagged for review", f"{flagged:,}", f"{flagged / total:.2%} of processed", RED),
+        ("Likely legitimate", f"{total - flagged:,}", ""),
+        ("Highest score", f"{results['Fraud Probability'].max():.2%}", "single transaction"),
+    ])
+    tab_dist, tab_queue, tab_thr = st.tabs(["Distribution", "Review queue", "Threshold analysis"])
+    with tab_dist:
         result_charts(results, threshold)
-    with tab_top:
-        top = results.nlargest(15, "Fraud Probability").copy()
-        top["Fraud Probability"] = top["Fraud Probability"] * 100
-        st.dataframe(top, use_container_width=True, hide_index=True,
-                     column_config={"Fraud Probability": st.column_config.ProgressColumn(
-                         "Fraud Probability (%)", min_value=0, max_value=100, format="%.2f")})
-    with tab_whatif:
-        st.caption("Exploration only — this does NOT change the saved model threshold or predictions.")
-        what_if = st.slider("Hypothetical threshold (%)", 0.0, 100.0, float(min(threshold * 100, 100.0)), 0.01)
-        n_flag = int((results["Fraud Probability"] >= what_if / 100).sum())
-        a, b, c = st.columns(3)
-        a.metric("Flagged at hypothetical threshold", f"{n_flag:,}", delta=f"{n_flag - flagged:+,} vs model")
-        b.metric("Flag rate", f"{n_flag / total:.2%}")
-        c.metric("Model threshold", f"{threshold:.4%}")
+    with tab_queue:
+        st.caption("The 25 highest-scoring transactions in this session.")
+        st.dataframe(prob_column(results.nlargest(25, "Fraud Probability")), use_container_width=True,
+                     hide_index=True, column_config=PROB_CONFIG)
+    with tab_thr:
+        threshold_analysis(results, threshold, flagged)
 
 
 def bulk_analysis(service: InferenceService) -> None:
-    hero("📂 Bulk Analysis", "Upload a CSV or Excel file. Files stay in this browser session and are not persisted.")
-    top_l, top_r = st.columns([3, 1])
-    with top_r:
-        st.download_button("⬇ Input template (CSV)", template_bytes(service.details.feature_names),
+    page_header("Bulk analysis", "Score a CSV or Excel file. Files stay in this browser session and are not stored.")
+    left, right = st.columns([4, 1])
+    with right:
+        st.download_button("Input template (CSV)", template_bytes(service.details.feature_names),
                            "transactionguard_template.csv", "text/csv", use_container_width=True)
-    with top_l:
+    with left:
         uploaded = st.file_uploader("Upload transactions", type=["csv", "xlsx", "xls"], label_visibility="collapsed")
 
     if uploaded:
@@ -307,28 +368,25 @@ def bulk_analysis(service: InferenceService) -> None:
 
         _, errors = service.validate(frame)
         extra = [c for c in frame.columns if c not in service.details.feature_names and c != "Class"]
-
-        cols = st.columns(4)
-        cols[0].markdown(kpi("Rows", f"{len(frame):,}"), unsafe_allow_html=True)
-        cols[1].markdown(kpi("Columns", len(frame.columns)), unsafe_allow_html=True)
-        cols[2].markdown(kpi("Missing cells", f"{int(frame.isna().sum().sum()):,}"), unsafe_allow_html=True)
-        status, color = ("Valid", "#10B981") if not errors else (f"{len(errors)} issue(s)", "#F43F5E")
-        cols[3].markdown(kpi("Validation", status, "", color), unsafe_allow_html=True)
-        st.write("")
-
-        with st.expander("Preview (first 10 rows)", expanded=False):
+        strip([
+            ("Rows", f"{len(frame):,}", uploaded.name),
+            ("Columns", len(frame.columns), f"{len(extra)} extra" if extra else "all expected"),
+            ("Missing cells", f"{int(frame.isna().sum().sum()):,}", ""),
+            ("Validation", "Passed" if not errors else f"{len(errors)} issue(s)", "", INK if not errors else RED),
+        ])
+        with st.expander("Preview first 10 rows"):
             st.dataframe(frame.head(10), use_container_width=True)
         if extra:
             st.info(f"Extra columns are preserved but not sent to the model: {', '.join(extra[:8])}")
         if "Class" in frame:
-            st.info("`Class` is treated as optional evaluation information and excluded from prediction inputs.")
+            st.info("`Class` is treated as optional evaluation information and excluded from model inputs.")
         if errors:
             for error in errors[:8]:
                 st.error(error)
             return
 
-        if st.button("🚀 Analyze transactions", type="primary"):
-            with st.spinner("Applying the saved model and feature engineering pipeline…"):
+        if st.button("Analyse transactions", type="primary"):
+            with st.spinner("Applying the saved model and feature pipeline…"):
                 try:
                     predictions = service.predict(frame)
                 except InferenceError as exc:
@@ -340,18 +398,16 @@ def bulk_analysis(service: InferenceService) -> None:
                 "source": uploaded.name,
                 "time": datetime.now().strftime("%d %b %Y, %H:%M"),
             }
-            st.toast("Analysis complete", icon="✅")
 
     results = st.session_state.get("results")
     if results is None:
         return
     meta = st.session_state.get("results_meta", {})
-    st.subheader("Results")
-    st.caption(f"Source: {meta.get('source', '—')} · analyzed {meta.get('time', '')}")
+    section(f"Results · {meta.get('source', '')} · {meta.get('time', '')}")
     tab_table, tab_charts = st.tabs(["Table", "Charts"])
     with tab_table:
         view = results_table(results, "bulk")
-        download_row(view, "bulk", " (filtered)")
+        download_row(view, "bulk", " (current view)")
     with tab_charts:
         result_charts(results, service.details.threshold)
 
@@ -363,61 +419,61 @@ def render_prediction(service: InferenceService, values: dict[str, float]) -> No
         st.error(str(exc))
         return
     probability = float(prediction["Fraud Probability"])
-    label = str(prediction["Predicted Class"])
-    risk = str(prediction["Risk Category"])
-    color = PALETTE.get(label, "#94A3B8")
+    label, risk = str(prediction["Predicted Class"]), str(prediction["Risk Category"])
+    color = RED if label == FRAUD else NAVY
     st.markdown(
-        f'<div class="tg-verdict" style="background:{color}22;border:1px solid {color};color:{color}">'
-        f'{"⚠️" if label == FRAUD else "✅"} {label} &nbsp; {risk_pill(risk)}</div>',
+        f'<div class="tg-callout" style="border-left-color:{color}">'
+        f'<div class="tg-callout-title" style="color:{color}">{escape(label)} &nbsp;{chip(risk + " risk", RISK_COLORS.get(risk, MUTED))}</div>'
+        f'<div class="tg-callout-body">Model estimate for triage. Not a confirmation of fraud.</div></div>',
         unsafe_allow_html=True,
     )
-    g, m = st.columns([3, 2])
-    g.plotly_chart(gauge(probability, service.details.threshold), use_container_width=True)
-    with m:
-        st.metric("Fraud probability", f"{probability:.2%}")
-        st.metric("Risk category", risk)
-        st.metric("Decision threshold", f"{service.details.threshold:.4%}")
-    st.warning("This is a model estimate for triage, not a guarantee or confirmation of fraud.")
+    strip([
+        ("Fraud probability", f"{probability:.3%}", "model score"),
+        ("Decision threshold", f"{service.details.threshold:.4%}", "flag at or above"),
+        ("Risk band", risk, "presentation only"),
+    ])
+    show(probability_bar(probability, service.details.threshold))
 
     history = st.session_state.setdefault("single_history", [])
     history.insert(0, {
         "Time": datetime.now().strftime("%H:%M:%S"),
         "Amount": values.get("Amount"),
-        "Probability %": round(probability * 100, 3),
-        "Class": label,
+        "Probability (%)": round(probability * 100, 4),
+        "Prediction": label,
         "Risk": risk,
     })
     del history[25:]
 
 
 def single_transaction(service: InferenceService) -> None:
-    hero("🔍 Single Transaction", "V1–V28 are anonymized PCA features and cannot be derived from customer details.")
+    page_header("Single transaction", "V1–V28 are anonymised PCA components and cannot be derived from customer details.")
     features = service.details.feature_names
-    tab_manual, tab_paste = st.tabs(["Manual entry", "Paste a row"])
+    tab_manual, tab_paste = st.tabs(["Enter values", "Paste a row"])
 
     with tab_manual:
         with st.form("single_transaction"):
             values: dict[str, float] = {}
-            basics, components = st.columns([1, 2])
+            basics, components = st.columns([1, 3])
             with basics:
-                st.markdown("**Core fields**")
+                section("Core fields")
                 for name in [x for x in features if x in {"Time", "Amount"}]:
                     help_text = "Seconds elapsed from the dataset reference point." if name == "Time" else "Transaction amount."
                     values[name] = st.number_input(name, value=0.0, format="%.8f", help=help_text)
             with components:
-                st.markdown("**Anonymized components**")
-                grid = st.columns(3)
+                section("Anonymised components")
+                grid = st.columns(4)
                 for i, name in enumerate([x for x in features if x not in {"Time", "Amount"}]):
-                    values[name] = grid[i % 3].number_input(name, value=0.0, format="%.8f")
-            submitted = st.form_submit_button("Analyze transaction", type="primary")
+                    values[name] = grid[i % 4].number_input(name, value=0.0, format="%.8f")
+            submitted = st.form_submit_button("Analyse transaction", type="primary")
         if submitted:
             render_prediction(service, {k: values[k] for k in features})
 
     with tab_paste:
-        st.caption(f"Paste {len(features)} comma-separated numbers in this order:")
+        st.caption(f"Paste {len(features)} comma-separated numbers in exactly this order:")
         st.code(", ".join(features), language=None)
-        raw = st.text_area("Row values", height=110, placeholder="0, -1.35, -0.07, ...")
-        if st.button("Analyze pasted row", type="primary"):
+        raw = st.text_area("Row values", height=110, label_visibility="collapsed",
+                           placeholder="0, -1.359807, -0.072781, ...")
+        if st.button("Analyse pasted row", type="primary"):
             try:
                 nums = [float(x) for x in raw.replace("\n", ",").split(",") if x.strip()]
             except ValueError:
@@ -430,14 +486,14 @@ def single_transaction(service: InferenceService) -> None:
 
     history = st.session_state.get("single_history")
     if history:
-        with st.expander(f"Session history ({len(history)})"):
-            st.dataframe(pd.DataFrame(history), use_container_width=True, hide_index=True)
+        section(f"Session history ({len(history)})")
+        st.dataframe(pd.DataFrame(history), use_container_width=True, hide_index=True)
 
 
 def performance(service: InferenceService) -> None:
-    hero("📈 Model Performance", "Evaluation on a held-out test set.")
-    st.warning("These are synthetic-data evaluation results, not live application performance or validation on real financial transactions.")
-    metrics_path = ROOT / "reports" / "test_metrics.json"
+    page_header("Model performance", "Evaluation on a held-out test set.")
+    st.warning("Synthetic-data evaluation. These figures are not live performance or validation on real financial transactions.")
+    metrics_path = config.REPORT_DIR / "test_metrics.json"
     if not metrics_path.exists():
         st.info("No evaluation report found. Run `python scripts/evaluate.py` after training.")
         return
@@ -446,36 +502,40 @@ def performance(service: InferenceService) -> None:
               "f1": "F1", "fpr": "False-positive rate", "fnr": "False-negative rate"}
     present = [k for k in labels if k in metrics]
     for row in (present[:4], present[4:]):
-        cols = st.columns(max(len(row), 1))
-        for col, key in zip(cols, row):
-            col.markdown(kpi(labels[key], f"{float(metrics[key]):.4f}"), unsafe_allow_html=True)
-        st.write("")
+        if row:
+            strip([(labels[k], f"{float(metrics[k]):.4f}", "") for k in row])
     left, right = st.columns([3, 2])
     with left:
-        fig = go.Figure(go.Bar(x=[float(metrics[k]) for k in present], y=[labels[k] for k in present],
-                               orientation="h", marker_color=ACCENT))
-        fig.update_xaxes(range=[0, 1])
-        st.plotly_chart(style_fig(fig, "Metric overview", 380), use_container_width=True)
+        fig = go.Figure(go.Bar(x=[float(metrics[k]) for k in present][::-1], y=[labels[k] for k in present][::-1],
+                               orientation="h", marker_color=NAVY,
+                               text=[f"{float(metrics[k]):.3f}" for k in present][::-1], textposition="outside"))
+        fig.update_xaxes(range=[0, 1.08])
+        show(style_fig(fig, "Metric overview", 360))
     with right:
-        image = ROOT / "reports" / "confusion_matrix.png"
+        image = config.REPORT_DIR / "confusion_matrix.png"
         if image.exists():
-            st.image(str(image), caption="Confusion matrix (synthetic held-out test set)")
+            st.image(str(image), caption="Confusion matrix, synthetic held-out test set")
     st.caption(f"Model: {service.details.name} · threshold: {service.details.threshold:.4%}")
 
 
 def about(service: InferenceService) -> None:
-    hero("ℹ️ About / Model Information", "What the model expects and how results are presented.")
-    c = st.columns(3)
-    c[0].markdown(kpi("Model", service.details.name), unsafe_allow_html=True)
-    c[1].markdown(kpi("Version", service.details.version), unsafe_allow_html=True)
-    c[2].markdown(kpi("Features", len(service.details.feature_names), "numeric fields"), unsafe_allow_html=True)
-    st.write("")
-    with st.expander("Required input features", expanded=True):
-        st.code(", ".join(service.details.feature_names), language=None)
-    st.markdown("**Risk bands** (presentation only — they do not change the saved classification threshold):")
-    st.markdown(f"{risk_pill('Low')} &lt;20% &nbsp; {risk_pill('Medium')} 20–&lt;60% &nbsp; {risk_pill('High')} ≥60%",
-                unsafe_allow_html=True)
-    st.write("")
+    page_header("About", "What the model expects and how results are presented.")
+    strip([
+        ("Model", service.details.name, ""),
+        ("Version", service.details.version, ""),
+        ("Input features", len(service.details.feature_names), "numeric fields"),
+    ])
+    section("Required input features")
+    st.code(", ".join(service.details.feature_names), language=None)
+    section("Risk bands")
+    st.markdown(
+        f"{chip('Low', RISK_COLORS['Low'])} &nbsp;below 20% &nbsp;&nbsp; "
+        f"{chip('Medium', RISK_COLORS['Medium'])} &nbsp;20% to below 60% &nbsp;&nbsp; "
+        f"{chip('High', RISK_COLORS['High'])} &nbsp;60% and above",
+        unsafe_allow_html=True,
+    )
+    st.caption("Bands are for presentation only. They do not change the saved classification threshold.")
+    section("Session")
     if st.button("Clear session results"):
         for key in ("results", "results_meta", "single_history"):
             st.session_state.pop(key, None)
@@ -490,19 +550,23 @@ def main() -> None:
         st.error(f"Model unavailable: {exc}")
         st.stop()
 
-    st.sidebar.markdown('<div class="tg-brand">🛡️ Transaction<span>Guard</span></div>', unsafe_allow_html=True)
-    st.sidebar.caption(f"{service.details.name} · v{service.details.version}")
-    page = st.sidebar.radio("Navigate", list(PAGES), label_visibility="collapsed")
+    st.sidebar.markdown(
+        f'<div class="tg-brand">TransactionGuard</div>'
+        f'<div class="tg-brand-sub">{escape(str(service.details.name))} · v{escape(str(service.details.version))}</div>',
+        unsafe_allow_html=True,
+    )
+    st.sidebar.write("")
+    page = st.sidebar.radio("Navigate", PAGES, label_visibility="collapsed")
     st.sidebar.divider()
     results = st.session_state.get("results")
     if results is not None:
-        st.sidebar.metric("Session rows analyzed", f"{len(results):,}")
+        st.sidebar.caption(f"{len(results):,} rows analysed this session")
     st.sidebar.caption("Runs locally. Uploaded transaction data is not stored.")
 
     {
-        "overview": overview, "bulk": bulk_analysis, "single": single_transaction,
-        "performance": performance, "about": about,
-    }[PAGES[page]](service)
+        "Overview": overview, "Bulk analysis": bulk_analysis, "Single transaction": single_transaction,
+        "Model performance": performance, "About": about,
+    }[page](service)
 
 
 if __name__ == "__main__":
