@@ -1,46 +1,261 @@
-import { Canvas, useFrame } from "@react-three/fiber";
-import { Float, Sparkles } from "@react-three/drei";
-import { motion } from "framer-motion";
-import { Activity, ArrowRight, FileUp, Menu, ShieldCheck, X, Zap } from "lucide-react";
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import * as THREE from "three";
+import { useEffect, useState } from "react";
+import { Activity, Menu, ShieldCheck, X } from "lucide-react";
+import { About } from "./components/About";
+import { Analysis } from "./components/Analysis";
+import { Insights } from "./components/Insights";
+import { Overview } from "./components/Overview";
+import { PageLink } from "./components/ui";
+import type { AnalysisResult, Health, ModelInfo, Page, Prediction } from "./types";
 
-const API = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
-type Info = { name: string; version: string; threshold: number; features: string[]; metrics: Record<string, number> };
-type Prediction = { "Fraud Probability": number; "Predicted Class": string; "Risk Category": string; "Prediction Status": string };
-type Result = { rows: Array<Record<string, unknown> & Prediction>; summary: { processed: number; flagged: number; highest_probability: number } };
+const API = (
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api"
+).replace(/\/+$/, "");
 
-function Core() {
-  const ref = useRef<THREE.Group>(null);
-  useFrame((_, delta) => { if (ref.current) { ref.current.rotation.y += delta * 0.18; ref.current.rotation.x = Math.sin(Date.now() / 2600) * 0.12; } });
-  return <group ref={ref}><Float speed={1.2} rotationIntensity={0.32} floatIntensity={0.5}>
-    <mesh><icosahedronGeometry args={[1.35, 2]} /><meshPhysicalMaterial color="#8b5cf6" transmission={0.35} roughness={0.15} metalness={0.42} transparent opacity={0.75} /></mesh>
-    <mesh scale={1.22}><icosahedronGeometry args={[1.35, 2]} /><meshBasicMaterial color="#67e8f9" wireframe transparent opacity={0.38} /></mesh>
-    <mesh rotation={[0.7, 0.4, 0]} scale={[1.85, .22, 1.85]}><torusGeometry args={[1, .018, 8, 90]} /><meshBasicMaterial color="#67e8f9" /></mesh>
-    <mesh rotation={[1.25, 0.3, 0.55]} scale={[2.15, .22, 2.15]}><torusGeometry args={[1, .012, 8, 90]} /><meshBasicMaterial color="#c4b5fd" /></mesh>
-  </Float></group>;
+async function readResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail || `The API request failed (${response.status}).`);
+  }
+  return response.json() as Promise<T>;
 }
-function HeroScene() { return <Canvas camera={{ position: [0, 0, 5], fov: 42 }}><ambientLight intensity={1.2}/><pointLight position={[3, 3, 4]} intensity={20} color="#67e8f9"/><pointLight position={[-4, -2, 2]} intensity={15} color="#8b5cf6"/><Core/><Sparkles count={40} scale={5} size={2} color="#c4b5fd"/></Canvas>; }
-const fmt = (n: number) => `${(n * 100).toFixed(3)}%`;
+
+const navigation: Array<{ id: Page; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "analyse", label: "Analyze transactions" },
+  { id: "intelligence", label: "Model insights" },
+  { id: "about", label: "About" },
+];
 
 export default function App() {
-  const [page, setPage] = useState("overview"), [open, setOpen] = useState(false), [info, setInfo] = useState<Info | null>(null);
-  const [result, setResult] = useState<Result | null>(null), [error, setError] = useState(""), [loading, setLoading] = useState(false);
-  useEffect(() => { fetch(`${API}/model-info`).then(r => r.ok ? r.json() : Promise.reject()).then(setInfo).catch(() => setError("The local API is offline. Start the FastAPI server to analyse transactions.")); }, []);
-  const nav = (target: string) => { setPage(target); setOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
-  const analyzeFile = async (file: File) => { setLoading(true); setError(""); const data = new FormData(); data.append("file", file); try { const r = await fetch(`${API}/predict/upload`, { method: "POST", body: data }); const body = await r.json(); if (!r.ok) throw new Error(body.detail); setResult(body); setPage("analyse"); } catch (e) { setError(e instanceof Error ? e.message : "Unable to analyse this file."); } finally { setLoading(false); } };
-  const predict = async (payload: Record<string, number>) => { setLoading(true); setError(""); try { const r = await fetch(`${API}/predict`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); const body = await r.json(); if (!r.ok) throw new Error(body.detail); setResult({ rows: [body], summary: { processed: 1, flagged: body["Predicted Class"] === "Potential Fraud" ? 1 : 0, highest_probability: body["Fraud Probability"] } }); } catch (e) { setError(e instanceof Error ? e.message : "Unable to analyse the transaction."); } finally { setLoading(false); } };
-  return <main><header><button className="brand" onClick={() => nav("overview")}><ShieldCheck/> TransactionGuard</button><nav>{[["overview","Overview"],["analyse","Analyze Transactions"],["intelligence","Model Intelligence"],["about","About"]].map(([id,label]) => <button className={page === id ? "active" : ""} onClick={() => nav(id)} key={id}>{label}</button>)}</nav><div className="status"><i/> Local model {info ? "ready" : "connecting"}</div><button className="menu" onClick={() => setOpen(!open)}>{open ? <X/> : <Menu/>}</button></header>
-    {open && <div className="mobile-nav">{[["overview","Overview"],["analyse","Analyze Transactions"],["intelligence","Model Intelligence"],["about","About"]].map(([id,label]) => <button onClick={() => nav(id)} key={id}>{label}</button>)}</div>}
-    {error && <div className="notice">{error}</div>}
-    {page === "overview" && <Overview nav={nav} info={info}/>} {page === "analyse" && <Analysis info={info} result={result} loading={loading} analyzeFile={analyzeFile} predict={predict}/>} {page === "intelligence" && <Intelligence info={info}/>} {page === "about" && <About info={info}/>} 
-  </main>;
+  const [page, setPage] = useState<Page>("overview");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [info, setInfo] = useState<ModelInfo | null>(null);
+  const [health, setHealth] = useState<Health>("checking");
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch(`${API}/health`, { signal: controller.signal })
+      .then(readResponse<{ status: string; model_loaded: boolean }>)
+      .then((data) => setHealth(data.model_loaded ? "ready" : "unavailable"))
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setHealth("unavailable");
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "The TransactionGuard API could not be reached.",
+          );
+        }
+      });
+
+    fetch(`${API}/model-info`, { signal: controller.signal })
+      .then(readResponse<ModelInfo>)
+      .then(setInfo)
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Model information could not be loaded.",
+          );
+        }
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  const navigate = (target: Page) => {
+    setPage(target);
+    setMenuOpen(false);
+    setError("");
+    window.scrollTo({
+      top: 0,
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+    });
+  };
+
+  const analyzeFile = async (file: File) => {
+    setLoading(true);
+    setError("");
+    const data = new FormData();
+    data.append("file", file);
+
+    try {
+      const response = await fetch(`${API}/predict/upload`, {
+        method: "POST",
+        body: data,
+      });
+      setResult(await readResponse<AnalysisResult>(response));
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "The transaction file could not be analyzed.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const predict = async (payload: Record<string, number>) => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch(`${API}/predict`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const prediction = await readResponse<Prediction>(response);
+      setResult({
+        rows: [prediction],
+        summary: {
+          processed: 1,
+          flagged: prediction["Predicted Class"] === "Potential Fraud" ? 1 : 0,
+          highest_probability: prediction["Fraud Probability"],
+        },
+      });
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "The transaction could not be analyzed.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="app-shell">
+      <header className="site-header">
+        <div className="header-inner">
+          <button
+            className="brand"
+            type="button"
+            onClick={() => navigate("overview")}
+            aria-label="TransactionGuard home"
+          >
+            <span className="brand-mark" aria-hidden="true">
+              <ShieldCheck size={19} strokeWidth={1.8} />
+            </span>
+            <span>Transaction<span className="brand-light">Guard</span></span>
+          </button>
+
+          <nav className="desktop-nav" aria-label="Main navigation">
+            {navigation.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={page === item.id ? "nav-link is-active" : "nav-link"}
+                aria-current={page === item.id ? "page" : undefined}
+                onClick={() => navigate(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+
+          <div className={`service-status status-${health}`} role="status">
+            <span className="status-dot" aria-hidden="true" />
+            <span>
+              {health === "checking"
+                ? "Connecting"
+                : health === "ready"
+                  ? "Model ready"
+                  : "API unavailable"}
+            </span>
+          </div>
+
+          <button
+            className="menu-toggle"
+            type="button"
+            aria-label={menuOpen ? "Close navigation" : "Open navigation"}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-navigation"
+            onClick={() => setMenuOpen((current) => !current)}
+          >
+            {menuOpen ? <X size={21} /> : <Menu size={21} />}
+          </button>
+        </div>
+        {menuOpen && (
+          <nav
+            className="mobile-nav"
+            id="mobile-navigation"
+            aria-label="Mobile navigation"
+          >
+            {navigation.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={page === item.id ? "mobile-nav-link is-active" : "mobile-nav-link"}
+                aria-current={page === item.id ? "page" : undefined}
+                onClick={() => navigate(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        )}
+      </header>
+
+      {error && (
+        <div className="global-alert" role="alert">
+          <div className="content-width alert-inner">
+            <Activity size={17} aria-hidden="true" />
+            <span>{error}</span>
+            <button
+              type="button"
+              className="alert-dismiss"
+              aria-label="Dismiss message"
+              onClick={() => setError("")}
+            >
+              <X size={17} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      <main id="main-content">
+        {page === "overview" && (
+          <Overview info={info} health={health} navigate={navigate} />
+        )}
+        {page === "analyse" && (
+          <Analysis
+            info={info}
+            result={result}
+            loading={loading}
+            onAnalyzeFile={analyzeFile}
+            onPredict={predict}
+          />
+        )}
+        {page === "intelligence" && <Insights info={info} />}
+        {page === "about" && <About info={info} />}
+      </main>
+
+      <footer className="site-footer">
+        <div className="content-width footer-inner">
+          <button
+            className="brand footer-brand"
+            type="button"
+            onClick={() => navigate("overview")}
+          >
+            <span className="brand-mark" aria-hidden="true">
+              <ShieldCheck size={17} strokeWidth={1.8} />
+            </span>
+            <span>Transaction<span className="brand-light">Guard</span></span>
+          </button>
+          <p>Machine-learning support for careful human review.</p>
+          <span className="footer-note">A demonstration project</span>
+        </div>
+      </footer>
+    </div>
+  );
 }
-function Overview({ nav, info }: { nav: (p: string) => void; info: Info | null }) { return <><section className="hero"><div className="grid"/><motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="hero-copy"><span className="eyebrow"><Zap/> AI-assisted fraud screening</span><h1>Financial intelligence.<br/><em>Built for trust.</em></h1><p>AI-assisted transaction screening that helps surface suspicious activity for human review.</p><div className="actions"><button className="primary" onClick={() => nav("analyse")}>Analyze Transactions <ArrowRight/></button><button onClick={() => nav("intelligence")}>Explore Model Intelligence</button></div><small>Local demo · Uploaded transaction data is never persisted.</small></motion.div><div className="scene"><HeroScene/></div></section><section className="intro"><span className="eyebrow">Transparent by design</span><h2>A signal for review, not a verdict.</h2><p>TransactionGuard uses a saved {info?.name || "fraud detection"} model and a preserved decision threshold to highlight records worth investigating. Evaluation is based on synthetic data only.</p></section></> }
-function Analysis({ info, result, loading, analyzeFile, predict }: { info: Info | null; result: Result | null; loading: boolean; analyzeFile: (f: File) => void; predict: (p: Record<string, number>) => void }) { const [mode,setMode]=useState("bulk"); return <section className="page"><span className="eyebrow">Review workspace</span><h2>Analyze transactions</h2><p>Use a compatible file or enter the model’s numeric features directly.</p><div className="seg"><button className={mode==="bulk"?"selected":""} onClick={()=>setMode("bulk")}>Bulk file analysis</button><button className={mode==="single"?"selected":""} onClick={()=>setMode("single")}>Single transaction</button></div>{mode === "bulk" ? <Upload loading={loading} onFile={analyzeFile}/> : <TransactionForm features={info?.features || []} loading={loading} predict={predict}/>} {result && <Results result={result}/>}</section> }
-function Upload({loading,onFile}:{loading:boolean;onFile:(f:File)=>void}) { const input=useRef<HTMLInputElement>(null); const pick=(e:ChangeEvent<HTMLInputElement>)=>e.target.files?.[0]&&onFile(e.target.files[0]); return <button className="dropzone" onClick={()=>input.current?.click()} disabled={loading}><FileUp/><strong>{loading ? "Applying the saved model…" : "Drop a transaction file here"}</strong><span>CSV, XLSX or XLS · up to 25 MB · files stay local to this session</span><input ref={input} type="file" accept=".csv,.xlsx,.xls" onChange={pick}/></button> }
-function TransactionForm({features,loading,predict}:{features:string[];loading:boolean;predict:(p:Record<string,number>)=>void}) { const [values,setValues]=useState<Record<string,number>>({}); const entries=features.length?features:["Time","V1","V2","V3","V4","V5","V6","V7","V8","V9","V10","V11","V12","V13","V14","V15","V16","V17","V18","V19","V20","V21","V22","V23","V24","V25","V26","V27","V28","Amount"]; return <form className="form" onSubmit={e=>{e.preventDefault(); predict(Object.fromEntries(entries.map(k=>[k,values[k] ?? 0])));}}><p><b>Required schema:</b> Time, V1–V28 and Amount are numeric model inputs. Components are anonymised and cannot be derived from a customer profile.</p><div className="fields">{entries.map(k=><label key={k}>{k}<input type="number" step="any" value={values[k] ?? 0} onChange={e=>setValues({...values,[k]:Number(e.target.value)})}/></label>)}</div><button className="primary" disabled={loading}>{loading?"Analysing…":"Analyze transaction"}<ArrowRight/></button></form> }
-function Results({result}:{result:Result}) { const data=useMemo(()=>result.rows.slice(0,100).map((r,i)=>({index:i+1, score:Number(r["Fraud Probability"])*100})),[result]); const download=()=>{const rows=result.rows; const keys=Object.keys(rows[0]||{}); const csv=[keys.join(","),...rows.map(r=>keys.map(k=>JSON.stringify(r[k]??"")).join(","))].join("\n"); const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="transactionguard-results.csv";a.click();}; return <div className="results"><div className="result-head"><div><span className="eyebrow">Analysis complete</span><h3>{result.summary.flagged} flagged <span>of {result.summary.processed} processed</span></h3></div><button onClick={download}>Download CSV</button></div><div className="chart"><ResponsiveContainer width="100%" height={230}><BarChart data={data}><CartesianGrid stroke="#27304a" vertical={false}/><XAxis dataKey="index" stroke="#969db2"/><YAxis stroke="#969db2" unit="%"/><Tooltip/><Bar dataKey="score" fill="#8b5cf6" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div><div className="table"><div className="tr th"><span>Row</span><span>Prediction</span><span>Probability</span><span>Risk band</span></div>{result.rows.slice(0,20).map((r,i)=><div className="tr" key={i}><span>#{i+1}</span><span className={r["Predicted Class"] === "Potential Fraud" ? "fraud" : "safe"}>{r["Predicted Class"]}</span><span>{fmt(Number(r["Fraud Probability"]))}</span><span>{r["Risk Category"]}</span></div>)}</div></div> }
-function Intelligence({info}:{info:Info|null}) { const data=Object.entries(info?.metrics||{}).filter(([k])=>["pr_auc","roc_auc","precision","recall","f1","fpr","fnr"].includes(k)).map(([name,value])=>({name:name.replace("_"," ").toUpperCase(),value:Number(value)*100})); return <section className="page intelligence"><span className="eyebrow">Synthetic evaluation</span><h2>Model intelligence</h2><p>These measures are from a held-out synthetic test set. They are not evidence of production performance or real-world fraud prevention.</p><div className="metric-hero"><div><b>{info?.name || "Loading model"}</b><span>decision threshold</span><strong>{info ? fmt(info.threshold) : "—"}</strong></div><ResponsiveContainer width="65%" height={270}><BarChart data={data} layout="vertical"><CartesianGrid stroke="#27304a" horizontal={false}/><XAxis type="number" unit="%" stroke="#969db2"/><YAxis dataKey="name" type="category" width={140} stroke="#969db2"/><Tooltip/><Bar dataKey="value" fill="#67e8f9" radius={[0,5,5,0]}/></BarChart></ResponsiveContainer></div></section> }
-function About({info}:{info:Info|null}) { return <section className="page about"><span className="eyebrow">About TransactionGuard</span><h2>Designed for responsible review.</h2><p>TransactionGuard is a local demonstration of ML-assisted transaction screening. It preserves input validation, a saved model threshold, and the model’s actual positive-class probability.</p><div className="about-grid"><article><Activity/><h3>Model inputs</h3><p>{info?.features.length || 30} numeric features: Time, anonymised V1–V28 components, and Amount.</p></article><article><ShieldCheck/><h3>Privacy</h3><p>The browser sends data only to your local FastAPI service. It is not persisted by the application.</p></article></div></section> }
