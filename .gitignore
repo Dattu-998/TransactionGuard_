@@ -1,0 +1,50 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+
+# Data & Artifacts (Keep specific directories but ignore contents if needed, managed via .gitkeep)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/reference/*
+!data/reference/.gitkeep
+artifacts/*
+!artifacts/.gitkeep
+!artifacts/model.joblib
+!artifacts/feature_engineer.joblib
+!artifacts/metadata.json
+!artifacts/schema.jsonreports/*
+!reports/.gitkeep
+mlruns/*
+!mlruns/.gitkeep
+notebooks/.ipynb_checkpoints
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+mlflow.db

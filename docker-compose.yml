@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./artifacts:/app/artifacts
+      - ./reports:/app/reports
+      - ./mlruns:/app/mlruns
+    environment:
+      - MODEL_ARTIFACT_DIR=/app/artifacts
+      - LOG_LEVEL=INFO
