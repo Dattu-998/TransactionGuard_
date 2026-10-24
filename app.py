@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from io import BytesIO
 from pathlib import Path
 
@@ -9,9 +10,13 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+ROOT = Path(__file__).resolve().parent
+SRC_DIR = ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
 from transactionguard.inference import InferenceError, InferenceService
 
-ROOT = Path(__file__).parent
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 PALETTE = {"Potential Fraud": "#EF4444", "Likely Legitimate": "#22C55E"}
 
