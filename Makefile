@@ -1,8 +1,9 @@
-.PHONY: setup lint test run-api docker-build docker-run train evaluate demo drift
+.PHONY: setup lint test run-api web docker-build docker-run train data evaluate drift
 
 setup:
-	pip install -r requirements.txt
-	pip install -e .[dev]
+	pip install -r requirements-dev.txt
+	pip install -e .
+	npm --prefix frontend install
 
 lint:
 	ruff check .
@@ -13,13 +14,10 @@ test:
 run-api:
 	uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-docker-build:
-	docker build -t transactionguard .
+web:
+	npm --prefix frontend run dev
 
-docker-run:
-	docker run -p 8000:8000 transactionguard
-
-demo:
+data:
 	python scripts/generate_demo_data.py
 
 train:
@@ -30,3 +28,9 @@ evaluate:
 
 drift:
 	python scripts/generate_drift_report.py
+
+docker-build:
+	docker build -t transactionguard .
+
+docker-run:
+	docker run -p 8000:8000 transactionguard

@@ -1,261 +1,183 @@
-import { useEffect, useState } from "react";
-import { Activity, Menu, ShieldCheck, X } from "lucide-react";
-import { About } from "./components/About";
-import { Analysis } from "./components/Analysis";
-import { Insights } from "./components/Insights";
-import { Overview } from "./components/Overview";
-import { PageLink } from "./components/ui";
-import type { AnalysisResult, Health, ModelInfo, Page, Prediction } from "./types";
+import {
+  Boxes,
+  Code2,
+  FileSpreadsheet,
+  LayoutDashboard,
+  Menu,
+  Radio,
+  ScanSearch,
+  ShieldCheck,
+  Waves,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { API_BASE } from "./api";
+import { TransactionDrawer } from "./components/TransactionDrawer";
+import { VersionTag } from "./components/ui";
+import { fmt } from "./lib/format";
+import { BatchAnalysis } from "./pages/BatchAnalysis";
+import { CommandCenter } from "./pages/CommandCenter";
+import { Developers } from "./pages/Developers";
+import { Investigate } from "./pages/Investigate";
+import { LiveMonitor } from "./pages/LiveMonitor";
+import { ModelRegistry } from "./pages/ModelRegistry";
+import { Monitoring } from "./pages/Monitoring";
+import { useChampion, useStore } from "./store";
+import type { Route } from "./types";
 
-const API = (
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api"
-).replace(/\/+$/, "");
-
-async function readResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.detail || `The API request failed (${response.status}).`);
-  }
-  return response.json() as Promise<T>;
-}
-
-const navigation: Array<{ id: Page; label: string }> = [
-  { id: "overview", label: "Overview" },
-  { id: "analyse", label: "Analyze transactions" },
-  { id: "intelligence", label: "Model insights" },
-  { id: "about", label: "About" },
+const NAV: Array<{ group: string; items: Array<{ id: Route; label: string; icon: ReactNode }> }> = [
+  {
+    group: "Operate",
+    items: [
+      { id: "command", label: "Command Center", icon: <LayoutDashboard size={17} /> },
+      { id: "live", label: "Live Monitor", icon: <Radio size={17} /> },
+      { id: "investigate", label: "Investigate", icon: <ScanSearch size={17} /> },
+      { id: "batch", label: "Batch Analysis", icon: <FileSpreadsheet size={17} /> },
+    ],
+  },
+  {
+    group: "Models",
+    items: [
+      { id: "registry", label: "Model Registry", icon: <Boxes size={17} /> },
+      { id: "monitoring", label: "Monitoring", icon: <Waves size={17} /> },
+    ],
+  },
+  { group: "Build", items: [{ id: "developers", label: "API & Docs", icon: <Code2 size={17} /> }] },
 ];
 
+const ROUTES = NAV.flatMap((group) => group.items.map((item) => item.id));
+
+function readRoute(): Route {
+  const hash = window.location.hash.replace(/^#\/?/, "") as Route;
+  return ROUTES.includes(hash) ? hash : "command";
+}
+
 export default function App() {
-  const [page, setPage] = useState<Page>("overview");
+  const [route, setRoute] = useState<Route>(readRoute);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [info, setInfo] = useState<ModelInfo | null>(null);
-  const [health, setHealth] = useState<Health>("checking");
-  const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const { status, health, registry, scoringModel, setScoringModel, live, events } = useStore();
+  const champion = useChampion();
 
   useEffect(() => {
-    const controller = new AbortController();
-
-    fetch(`${API}/health`, { signal: controller.signal })
-      .then(readResponse<{ status: string; model_loaded: boolean }>)
-      .then((data) => setHealth(data.model_loaded ? "ready" : "unavailable"))
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted) {
-          setHealth("unavailable");
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "The TransactionGuard API could not be reached.",
-          );
-        }
-      });
-
-    fetch(`${API}/model-info`, { signal: controller.signal })
-      .then(readResponse<ModelInfo>)
-      .then(setInfo)
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted) {
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "Model information could not be loaded.",
-          );
-        }
-      });
-
-    return () => controller.abort();
+    const onHash = () => setRoute(readRoute());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  const navigate = (target: Page) => {
-    setPage(target);
+  const go = useCallback((target: Route) => {
+    window.location.hash = `/${target}`;
     setMenuOpen(false);
-    setError("");
-    window.scrollTo({
-      top: 0,
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
-        : "smooth",
-    });
-  };
+    window.scrollTo({ top: 0 });
+  }, []);
 
-  const analyzeFile = async (file: File) => {
-    setLoading(true);
-    setError("");
-    const data = new FormData();
-    data.append("file", file);
-
-    try {
-      const response = await fetch(`${API}/predict/upload`, {
-        method: "POST",
-        body: data,
-      });
-      setResult(await readResponse<AnalysisResult>(response));
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "The transaction file could not be analyzed.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const predict = async (payload: Record<string, number>) => {
-    setLoading(true);
-    setError("");
-
-    try {
-      const response = await fetch(`${API}/predict`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const prediction = await readResponse<Prediction>(response);
-      setResult({
-        rows: [prediction],
-        summary: {
-          processed: 1,
-          flagged: prediction["Predicted Class"] === "Potential Fraud" ? 1 : 0,
-          highest_probability: prediction["Fraud Probability"],
-        },
-      });
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "The transaction could not be analyzed.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+  const title = NAV.flatMap((g) => g.items).find((item) => item.id === route)?.label ?? "";
+  const alerts = events.filter((e) => e.prediction.decision !== "approve").length;
 
   return (
-    <div className="app-shell">
-      <header className="site-header">
-        <div className="header-inner">
-          <button
-            className="brand"
-            type="button"
-            onClick={() => navigate("overview")}
-            aria-label="TransactionGuard home"
-          >
-            <span className="brand-mark" aria-hidden="true">
-              <ShieldCheck size={19} strokeWidth={1.8} />
-            </span>
-            <span>Transaction<span className="brand-light">Guard</span></span>
-          </button>
-
-          <nav className="desktop-nav" aria-label="Main navigation">
-            {navigation.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={page === item.id ? "nav-link is-active" : "nav-link"}
-                aria-current={page === item.id ? "page" : undefined}
-                onClick={() => navigate(item.id)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
-
-          <div className={`service-status status-${health}`} role="status">
-            <span className="status-dot" aria-hidden="true" />
-            <span>
-              {health === "checking"
-                ? "Connecting"
-                : health === "ready"
-                  ? "Model ready"
-                  : "API unavailable"}
-            </span>
+    <div className="shell">
+      <aside className={menuOpen ? "sidebar is-open" : "sidebar"}>
+        <div className="brand">
+          <span className="brand-mark"><ShieldCheck size={18} strokeWidth={2} /></span>
+          <div>
+            <strong>TransactionGuard</strong>
+            <span>Fraud Intelligence</span>
           </div>
-
-          <button
-            className="menu-toggle"
-            type="button"
-            aria-label={menuOpen ? "Close navigation" : "Open navigation"}
-            aria-expanded={menuOpen}
-            aria-controls="mobile-navigation"
-            onClick={() => setMenuOpen((current) => !current)}
-          >
-            {menuOpen ? <X size={21} /> : <Menu size={21} />}
+          <button type="button" className="icon-btn menu-close" onClick={() => setMenuOpen(false)} aria-label="Close menu">
+            <X size={18} />
           </button>
         </div>
-        {menuOpen && (
-          <nav
-            className="mobile-nav"
-            id="mobile-navigation"
-            aria-label="Mobile navigation"
-          >
-            {navigation.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={page === item.id ? "mobile-nav-link is-active" : "mobile-nav-link"}
-                aria-current={page === item.id ? "page" : undefined}
-                onClick={() => navigate(item.id)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
-        )}
-      </header>
 
-      {error && (
-        <div className="global-alert" role="alert">
-          <div className="content-width alert-inner">
-            <Activity size={17} aria-hidden="true" />
-            <span>{error}</span>
-            <button
-              type="button"
-              className="alert-dismiss"
-              aria-label="Dismiss message"
-              onClick={() => setError("")}
-            >
-              <X size={17} />
+        <nav aria-label="Main">
+          {NAV.map((group) => (
+            <div key={group.group} className="nav-group">
+              <span className="nav-group-label">{group.group}</span>
+              {group.items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={route === item.id ? "nav-item is-active" : "nav-item"}
+                  aria-current={route === item.id ? "page" : undefined}
+                  onClick={() => go(item.id)}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                  {item.id === "live" && live.running && <i className="nav-live" aria-label="streaming" />}
+                  {item.id === "command" && alerts > 0 && <span className="nav-count">{alerts > 99 ? "99+" : alerts}</span>}
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+
+        <div className="sidebar-foot">
+          {champion ? (
+            <button type="button" className="champion-pill" onClick={() => go("registry")}>
+              <span className="muted small">Champion in production</span>
+              <span className="champion-pill-row">
+                <VersionTag version={champion.version} />
+                <strong>{champion.name}</strong>
+              </span>
+              <span className="muted small">PR-AUC {champion.metrics.pr_auc.toFixed(3)} · {registry?.versions.length} versions</span>
             </button>
-          </div>
+          ) : (
+            <span className="skeleton" style={{ height: 70 }} />
+          )}
+          <p className="disclaimer">Demo on a synthetic benchmark. Decisions support analysts; they are not financial advice.</p>
         </div>
-      )}
+      </aside>
+      {menuOpen && <div className="sidebar-scrim" onClick={() => setMenuOpen(false)} />}
 
-      <main id="main-content">
-        {page === "overview" && (
-          <Overview info={info} health={health} navigate={navigate} />
-        )}
-        {page === "analyse" && (
-          <Analysis
-            info={info}
-            result={result}
-            loading={loading}
-            onAnalyzeFile={analyzeFile}
-            onPredict={predict}
-          />
-        )}
-        {page === "intelligence" && <Insights info={info} />}
-        {page === "about" && <About info={info} />}
-      </main>
-
-      <footer className="site-footer">
-        <div className="content-width footer-inner">
-          <button
-            className="brand footer-brand"
-            type="button"
-            onClick={() => navigate("overview")}
-          >
-            <span className="brand-mark" aria-hidden="true">
-              <ShieldCheck size={17} strokeWidth={1.8} />
-            </span>
-            <span>Transaction<span className="brand-light">Guard</span></span>
+      <div className="main">
+        <header className="topbar">
+          <button type="button" className="icon-btn menu-open" onClick={() => setMenuOpen(true)} aria-label="Open menu">
+            <Menu size={19} />
           </button>
-          <p>Machine-learning support for careful human review.</p>
-          <span className="footer-note">A demonstration project</span>
-        </div>
-      </footer>
+          <div className="crumbs">
+            <span className="muted">TransactionGuard</span>
+            <span className="muted">/</span>
+            <strong>{title}</strong>
+          </div>
+          <div className="topbar-right">
+            {registry && (
+              <label className="model-select">
+                <span>Scoring model</span>
+                <select value={scoringModel ?? ""} onChange={(e) => setScoringModel(e.target.value || undefined)}>
+                  <option value="">Champion ({registry.champion})</option>
+                  {registry.versions.filter((v) => v.version !== registry.champion).map((v) => (
+                    <option key={v.version} value={v.version}>{v.version} · {v.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <span className={`api-status ${status}`} title={API_BASE}>
+              <i />
+              {status === "online" ? `API online${health ? ` · v${health.api_version}` : ""}`
+                : status === "connecting" ? "Connecting to API…" : "API offline"}
+              {status === "online" && health && <span className="muted"> · up {fmt.duration(health.uptime_seconds)}</span>}
+            </span>
+          </div>
+        </header>
+
+        {status === "connecting" && (
+          <div className="banner info">Waking the scoring API — free hosting can take up to a minute on the first request.</div>
+        )}
+        {status === "offline" && (
+          <div className="banner danger">
+            The API at <code>{API_BASE}</code> is unreachable. Start it with <code>uvicorn app.main:app --port 8000</code>; retrying automatically.
+          </div>
+        )}
+
+        <main className="content">
+          {route === "command" && <CommandCenter go={go} />}
+          {route === "live" && <LiveMonitor />}
+          {route === "investigate" && <Investigate />}
+          {route === "batch" && <BatchAnalysis />}
+          {route === "registry" && <ModelRegistry />}
+          {route === "monitoring" && <Monitoring />}
+          {route === "developers" && <Developers />}
+        </main>
+      </div>
+      <TransactionDrawer />
     </div>
   );
 }

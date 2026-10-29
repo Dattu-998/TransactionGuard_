@@ -1,0 +1,132 @@
+{
+  "champion": "v3",
+  "created_at": "2026-10-29T13:57:34+00:00",
+  "dataset": {
+    "source": "synthetic",
+    "description": "TransactionGuard synthetic benchmark: Kaggle-schema transactions with four fraud patterns (card testing, account takeover, merchant compromise, stealth)",
+    "fingerprint": "0b879bcbe721e48b",
+    "rows": 284807,
+    "fraud_rows": 598,
+    "fraud_rate": 0.002099667494127602,
+    "splits": {
+      "train": {
+        "rows": 199364,
+        "fraud_rows": 418
+      },
+      "validation": {
+        "rows": 42721,
+        "fraud_rows": 90
+      },
+      "test": {
+        "rows": 42722,
+        "fraud_rows": 90
+      }
+    }
+  },
+  "costs": {
+    "false_negative": 1000.0,
+    "false_positive": 10.0
+  },
+  "versions": [
+    {
+      "version": "v1",
+      "name": "Logistic Regression baseline",
+      "family": "Linear model",
+      "stage": "archived",
+      "summary": "Class-weighted logistic regression over the raw inputs. The original model.",
+      "highlights": [
+        "Raw 30 inputs",
+        "Class-weighted",
+        "Fully linear"
+      ],
+      "created_at": "2026-10-29T13:57:34+00:00",
+      "thresholds": {
+        "review": 0.786284074275638,
+        "block": 0.9998833014595814,
+        "block_precision_target": 0.9
+      },
+      "metrics": {
+        "val_pr_auc": 0.4820648228372518,
+        "pr_auc": 0.5071692118952811,
+        "roc_auc": 0.9734844456954609,
+        "precision": 0.07177033492822966,
+        "recall": 0.8333333333333334,
+        "f1": 0.13215859030837004,
+        "brier": 0.04250334970212224,
+        "fp": 970,
+        "fn": 15,
+        "cost_reduction": 0.7255555555555555,
+        "amount_recall": 0.9135532283433555,
+        "latency_p50_ms": 8.473650028463453
+      },
+      "artifact_bytes": 1807
+    },
+    {
+      "version": "v2",
+      "name": "Random Forest + behavioral features",
+      "family": "Bagged trees",
+      "stage": "challenger",
+      "summary": "Random forest over engineered time, amount and anomaly features.",
+      "highlights": [
+        "37 engineered features",
+        "Non-linear interactions",
+        "Balanced bootstrap"
+      ],
+      "created_at": "2026-10-29T13:57:34+00:00",
+      "thresholds": {
+        "review": 0.0903547856689767,
+        "block": 0.5705493084216519,
+        "block_precision_target": 0.9
+      },
+      "metrics": {
+        "val_pr_auc": 0.5700080761374223,
+        "pr_auc": 0.5973161687495993,
+        "roc_auc": 0.965433112320427,
+        "precision": 0.07377049180327869,
+        "recall": 0.8,
+        "f1": 0.1350844277673546,
+        "brier": 0.0018635283935128828,
+        "fp": 904,
+        "fn": 18,
+        "cost_reduction": 0.6995555555555555,
+        "amount_recall": 0.9252946046864471,
+        "latency_p50_ms": 78.1550999963656
+      },
+      "artifact_bytes": 3681964
+    },
+    {
+      "version": "v3",
+      "name": "Calibrated LightGBM",
+      "family": "Gradient-boosted trees",
+      "stage": "champion",
+      "summary": "Gradient boosting over engineered features, 3-fold cross-fitted with Platt calibration so scores are usable probabilities.",
+      "highlights": [
+        "Gradient boosting",
+        "3-fold calibration",
+        "Reason codes",
+        "Engineered features"
+      ],
+      "created_at": "2026-10-29T13:57:34+00:00",
+      "thresholds": {
+        "review": 0.008652815677660073,
+        "block": 0.3351730809324825,
+        "block_precision_target": 0.9
+      },
+      "metrics": {
+        "val_pr_auc": 0.7661203161869501,
+        "pr_auc": 0.8003416805845159,
+        "roc_auc": 0.9887471070244573,
+        "precision": 0.14096185737976782,
+        "recall": 0.9444444444444444,
+        "f1": 0.2453102453102453,
+        "brier": 0.0007617592126459061,
+        "fp": 518,
+        "fn": 5,
+        "cost_reduction": 0.8868888888888888,
+        "amount_recall": 0.9749195365097468,
+        "latency_p50_ms": 30.800800013821572
+      },
+      "artifact_bytes": 3268735
+    }
+  ]
+}

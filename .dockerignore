@@ -21,3 +21,9 @@ data/raw/*
 data/processed/*
 !data/processed/.gitkeep
 .env
+frontend/
+data/
+mlruns/
+mlflow.db
+reports/
+.claude/

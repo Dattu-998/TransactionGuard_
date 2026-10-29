@@ -1,48 +1,40 @@
+"""Re-score the held-out test split with every registered version and print a leaderboard."""
+
 import json
 
-import joblib
 import pandas as pd
 
 from transactionguard.config import config
-from transactionguard.models.evaluate import evaluate_model, plot_confusion_matrix
+from transactionguard.models.evaluate import evaluate_model
+from transactionguard.models.registry import ModelRegistry
+from transactionguard.scoring import positive_probabilities, validate_frame
 from transactionguard.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-def main():
-    test_data_path = config.PROCESSED_DATA_DIR / "test_data.csv"
-    if not test_data_path.exists():
-        logger.error("Test data not found.")
+
+def main() -> None:
+    test_path = config.PROCESSED_DATA_DIR / "test_data.csv"
+    if not test_path.exists():
+        logger.error("Test data not found; run scripts/train.py first.")
         return
-    df_test = pd.read_csv(test_data_path)
-    try:
-        model = joblib.load(config.ARTIFACT_DIR / "model.joblib")
-        fe = joblib.load(config.ARTIFACT_DIR / "feature_engineer.joblib")
-        with open(config.ARTIFACT_DIR / "metadata.json", "r") as f:
-            metadata = json.load(f)
-    except FileNotFoundError as e:
-        logger.error(f"Artifact not found: {e}")
-        return
+    test = pd.read_csv(test_path)
+    features, labels = validate_frame(test), test[config.TARGET_COL]
+    registry = ModelRegistry(config.ARTIFACT_DIR).load()
+    leaderboard = {}
+    for version in registry.versions:
+        model = registry.get(version)
+        probabilities = positive_probabilities(model.estimator, features)
+        metrics = evaluate_model(labels, probabilities, threshold=model.policy.review_threshold)
+        leaderboard[version] = metrics
+        flag = "*" if version == registry.champion else " "
+        logger.info("%s%s PR-AUC %.4f  ROC-AUC %.4f  recall %.3f  precision %.3f  brier %.5f",
+                    flag, version, metrics["pr_auc"], metrics["roc_auc"], metrics["recall"],
+                    metrics["precision"], metrics["brier"])
+    out = config.REPORT_DIR / "leaderboard.json"
+    out.write_text(json.dumps(leaderboard, indent=2), encoding="utf-8")
+    logger.info("Leaderboard written to %s", out)
 
-    threshold = metadata.get("threshold", 0.5)
-    X_test = fe.transform(df_test)
-    y_test = df_test[config.TARGET_COL]
-
-    if hasattr(model, "predict_proba"):
-        y_prob = model.predict_proba(X_test)[:, 1]
-    else:
-        y_prob = model.predict(X_test)
-
-    metrics = evaluate_model(y_test, y_prob, threshold=threshold)
-    with open(config.REPORT_DIR / "test_metrics.json", "w") as f:
-        json.dump(metrics, f, indent=4)
-    y_pred = (y_prob >= threshold).astype(int)
-    plot_confusion_matrix(y_test, y_pred, config.REPORT_DIR / "confusion_matrix.png")
-
-    logger.info(f"Test PR-AUC: {metrics['pr_auc']:.4f}")
-    logger.info(f"Test ROC-AUC: {metrics['roc_auc']:.4f}")
-    logger.info(f"Test Recall: {metrics['recall']:.4f}")
-    logger.info(f"Test Precision: {metrics['precision']:.4f}")
 
 if __name__ == "__main__":
     main()

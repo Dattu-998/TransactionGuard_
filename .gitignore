@@ -27,12 +27,8 @@ data/processed/*
 !data/processed/.gitkeep
 data/reference/*
 !data/reference/.gitkeep
-artifacts/*
-!artifacts/.gitkeep
-!artifacts/model.joblib
-!artifacts/feature_engineer.joblib
-!artifacts/metadata.json
-!artifacts/schema.json
+# The published model registry is versioned with the code so deploys are reproducible.
+artifacts/*.joblib
 reports/*
 !reports/.gitkeep
 mlruns/*

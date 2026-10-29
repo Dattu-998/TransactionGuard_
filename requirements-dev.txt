@@ -1,0 +1,9 @@
+-r requirements.txt
+
+# Tests, lint, experiment tracking and dataset download
+pytest>=7.0.0
+pytest-cov>=4.1.0
+ruff>=0.1.0
+httpx>=0.24.0
+mlflow>=2.5.0
+kaggle>=1.5.16
