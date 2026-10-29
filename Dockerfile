@@ -2,6 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# LightGBM needs the OpenMP runtime, which slim images do not ship
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
+
 # Install serving dependencies only (training extras live in requirements-dev.txt)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

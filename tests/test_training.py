@@ -53,3 +53,17 @@ def test_registry_scores_and_explains(registry_dir, benchmark):
     # The champion should rank fraud above typical legitimate traffic.
     legit, _, _ = registry.score(benchmark[benchmark["Class"] == 0].head(200), explain_rows="none")
     assert results["fraud_probability"].median() > legit["fraud_probability"].median()
+
+
+def test_registry_falls_back_when_champion_cannot_load(registry_dir, tmp_path):
+    import shutil
+
+    copy = tmp_path / "artifacts"
+    shutil.copytree(registry_dir, copy)
+    champion = json.loads((copy / "registry.json").read_text())["champion"]
+    (copy / "models" / champion / "model.joblib").write_bytes(b"not a pickle")
+    registry = ModelRegistry(copy).load()
+    assert champion in registry.load_errors
+    assert champion not in registry.versions
+    assert registry.champion in registry.versions
+    assert [e["version"] for e in registry.index["versions"]] == registry.versions

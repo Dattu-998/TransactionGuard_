@@ -13,6 +13,7 @@ Layout under the artifact directory::
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +33,7 @@ from transactionguard.scoring import (
 )
 
 REGISTRY_FILE = "registry.json"
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -54,6 +56,7 @@ class ModelRegistry:
         self.feature_stats: dict = {}
         self.drift_reference: dict = {}
         self.samples: pd.DataFrame | None = None
+        self.load_errors: dict[str, str] = {}
 
     # ------------------------------------------------------------------ loading
     def load(self) -> ModelRegistry:
@@ -63,10 +66,7 @@ class ModelRegistry:
         try:
             self.index = json.loads(index_path.read_text(encoding="utf-8"))
             for entry in self.index["versions"]:
-                folder = self.artifact_dir / "models" / entry["version"]
-                card = json.loads((folder / "card.json").read_text(encoding="utf-8"))
-                estimator = joblib.load(folder / "model.joblib")
-                self.models[entry["version"]] = LoadedModel(entry["version"], card, estimator)
+                self._load_version(entry["version"])
             self.feature_stats = self._read_json("feature_stats.json")
             self.drift_reference = self._read_json("drift_reference.json")
             samples_path = self.artifact_dir / "samples" / "demo_transactions.csv"
@@ -74,9 +74,27 @@ class ModelRegistry:
                 self.samples = pd.read_csv(samples_path)
         except (OSError, KeyError, ValueError, TypeError) as exc:
             raise ScoringError(f"Unable to load the model registry: {exc}") from exc
+        if not self.models:
+            raise ScoringError(f"No model version could be loaded: {self.load_errors}")
+        # Serve only what loaded; if the champion failed (e.g. a missing native
+        # library on the host), keep the service up on the best remaining version.
+        self.index["versions"] = [e for e in self.index["versions"] if e["version"] in self.models]
         if self.index.get("champion") not in self.models:
-            raise ScoringError("The registry champion is not among the loaded models.")
+            fallback = max(self.models, key=lambda v: self.models[v].card["validation"]["pr_auc"])
+            logger.error("Champion %s unavailable; serving %s instead.", self.index.get("champion"), fallback)
+            self.index["champion"] = fallback
         return self
+
+    def _load_version(self, version: str) -> None:
+        folder = self.artifact_dir / "models" / version
+        try:
+            card = json.loads((folder / "card.json").read_text(encoding="utf-8"))
+            estimator = joblib.load(folder / "model.joblib")
+        except Exception as exc:  # noqa: BLE001 - unpickling fails in many ways (deps, bad file)
+            self.load_errors[version] = f"{type(exc).__name__}: {exc}"
+            logger.error("Could not load model %s: %s", version, self.load_errors[version])
+            return
+        self.models[version] = LoadedModel(version, card, estimator)
 
     def _read_json(self, name: str) -> dict:
         path = self.artifact_dir / name

@@ -123,6 +123,7 @@ async def health(request: Request):
         versions=registry.versions if registry else [],
         uptime_seconds=request.app.state.telemetry.uptime,
         api_version=app_config.api_version,
+        load_errors=registry.load_errors if registry else {},
     )
 
 

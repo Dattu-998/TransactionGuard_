@@ -96,3 +96,4 @@ class Health(BaseModel):
     versions: list[str] = []
     uptime_seconds: float
     api_version: str
+    load_errors: dict[str, str] = {}
