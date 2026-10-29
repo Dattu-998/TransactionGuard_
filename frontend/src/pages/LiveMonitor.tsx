@@ -53,7 +53,6 @@ export function LiveMonitor() {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Operations"
         title="Live Monitor"
         description="A simulated production stream of held-out transactions, scored one by one with reason codes. Ground truth is shown so you can watch the model earn its keep."
         actions={
@@ -134,7 +133,7 @@ export function LiveMonitor() {
                     return (
                       <motion.tr
                         key={event.key}
-                        initial={{ opacity: 0, backgroundColor: "rgba(109,140,255,0.16)" }}
+                        initial={{ opacity: 0, backgroundColor: "rgba(255,255,255,0.05)" }}
                         animate={{ opacity: 1, backgroundColor: "rgba(0,0,0,0)" }}
                         exit={{ opacity: 0, transition: { duration: 0 } }}
                         transition={{ duration: 0.6 }}

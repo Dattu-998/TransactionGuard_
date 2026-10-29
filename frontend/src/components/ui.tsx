@@ -1,15 +1,13 @@
 import { Info, LoaderCircle } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
-import { DECISION_META, RISK_META, STAGE_META, riskColor, versionColor } from "../lib/format";
+import { DECISION_META, RISK_META, STAGE_META, riskColor } from "../lib/format";
 import type { Decision, RiskLevel, Stage } from "../types";
 
 export function PageHeader({
-  eyebrow,
   title,
   description,
   actions,
 }: {
-  eyebrow: string;
   title: string;
   description?: ReactNode;
   actions?: ReactNode;
@@ -17,7 +15,6 @@ export function PageHeader({
   return (
     <header className="page-header">
       <div>
-        <p className="eyebrow">{eyebrow}</p>
         <h1>{title}</h1>
         {description && <p className="page-description">{description}</p>}
       </div>
@@ -95,7 +92,8 @@ export function DecisionBadge({ decision, size = "md" }: { decision: Decision; s
 export function RiskBadge({ level }: { level: RiskLevel }) {
   const meta = RISK_META[level];
   return (
-    <span className="badge badge-sm badge-outline" style={{ "--badge": meta.color } as CSSProperties}>
+    <span className="badge badge-sm" style={{ "--badge": meta.color } as CSSProperties}>
+      <i className="badge-dot" />
       {meta.label}
     </span>
   );
@@ -104,7 +102,8 @@ export function RiskBadge({ level }: { level: RiskLevel }) {
 export function StageBadge({ stage }: { stage: Stage }) {
   const meta = STAGE_META[stage];
   return (
-    <span className="badge badge-sm badge-outline" style={{ "--badge": meta.color } as CSSProperties}>
+    <span className="badge badge-sm" style={{ "--badge": meta.color } as CSSProperties}>
+      <i className="badge-dot" />
       {meta.label}
     </span>
   );
@@ -112,9 +111,7 @@ export function StageBadge({ stage }: { stage: Stage }) {
 
 export function VersionTag({ version }: { version: string }) {
   return (
-    <span className="version-tag" style={{ "--badge": versionColor(version) } as CSSProperties}>
-      {version}
-    </span>
+    <span className="version-tag">{version}</span>
   );
 }
 

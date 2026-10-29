@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, CheckCircle2, Clock, Cpu, RefreshCw, ServerCrash } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../api";
@@ -75,7 +75,6 @@ export function Monitoring() {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Models"
         title="Monitoring"
         description="Population Stability Index (PSI) of every input and of the model's own score, against the training distribution — plus live service health."
       />
@@ -182,11 +181,11 @@ export function Monitoring() {
         {metrics ? (
           <>
             <div className="stat-grid">
-              <Stat label="Uptime" icon={<Clock size={16} />} value={fmt.duration(metrics.uptime_seconds)} />
-              <Stat label="Requests" icon={<Activity size={16} />} value={fmt.int(metrics.requests_total)} />
-              <Stat label="Transactions scored" icon={<Cpu size={16} />} value={fmt.int(metrics.transactions_scored)} />
+              <Stat label="Uptime" value={fmt.duration(metrics.uptime_seconds)} />
+              <Stat label="Requests" value={fmt.int(metrics.requests_total)} />
+              <Stat label="Transactions scored" value={fmt.int(metrics.transactions_scored)} />
               <Stat label="Latency p50" value={fmt.ms(metrics.latency_ms.p50)} hint={`p95 ${fmt.ms(metrics.latency_ms.p95)} · p99 ${fmt.ms(metrics.latency_ms.p99)}`} />
-              <Stat label="Server errors" tone={metrics.errors_total ? "block" : undefined} icon={<ServerCrash size={16} />} value={fmt.int(metrics.errors_total)} />
+              <Stat label="Server errors" tone={metrics.errors_total ? "block" : undefined} value={fmt.int(metrics.errors_total)} />
               <Stat label="Decisions" value={`${fmt.int(metrics.decisions.block)} / ${fmt.int(metrics.decisions.review)}`} hint="blocked / reviewed" />
             </div>
             <Hint>Counters are in-process and reset when the API restarts. Prediction latency includes reason-code computation.</Hint>

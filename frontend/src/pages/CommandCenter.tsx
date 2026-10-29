@@ -1,19 +1,6 @@
-import {
-  Activity,
-  BadgeCheck,
-  Ban,
-  CircleDollarSign,
-  Gauge,
-  Pause,
-  Play,
-  Radar,
-  ShieldAlert,
-  Timer,
-} from "lucide-react";
+import { Gauge, Pause, Play, Radar } from "lucide-react";
 import { useMemo } from "react";
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -79,7 +66,6 @@ export function CommandCenter({ go }: { go: (route: Route) => void }) {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Operations"
         title="Command Center"
         description="Real-time view of screening decisions, alert pressure and the model in production."
         actions={
@@ -92,18 +78,18 @@ export function CommandCenter({ go }: { go: (route: Route) => void }) {
       />
 
       <div className="stat-grid">
-        <Stat label="Transactions screened" icon={<Activity size={16} />} value={fmt.int(stats.total)}
+        <Stat label="Transactions screened" value={fmt.int(stats.total)}
               hint={`${fmt.moneyCompact(stats.amount)} processed this session`} />
-        <Stat label="Auto-blocked" tone="block" icon={<Ban size={16} />} value={fmt.int(stats.block)}
+        <Stat label="Auto-blocked" tone="block" value={fmt.int(stats.block)}
               hint={stats.total ? `${fmt.pct(stats.block / stats.total)} of traffic` : "High-confidence fraud"} />
-        <Stat label="In review queue" tone="review" icon={<ShieldAlert size={16} />} value={fmt.int(stats.review)}
+        <Stat label="In review queue" tone="review" value={fmt.int(stats.review)}
               hint={stats.total ? `${fmt.pct(stats.review / stats.total)} of traffic` : "Analyst workload"} />
-        <Stat label="Value held" tone="accent" icon={<CircleDollarSign size={16} />} value={fmt.moneyCompact(stats.amountStopped)}
+        <Stat label="Value held" tone="accent" value={fmt.moneyCompact(stats.amountStopped)}
               hint="Blocked or pending review" />
-        <Stat label="Detection rate" tone="approve" icon={<BadgeCheck size={16} />}
+        <Stat label="Detection rate" tone="approve"
               value={stats.detectionRate === null ? "—" : fmt.pct(stats.detectionRate)}
               hint={stats.actualFraud ? `${stats.caught} of ${stats.actualFraud} known frauds stopped` : "Needs labelled traffic"} />
-        <Stat label="Model latency" icon={<Timer size={16} />} value={stats.total ? fmt.ms(stats.avgLatency) : card ? fmt.ms(card.latency.p50_ms) : "—"}
+        <Stat label="Model latency" value={stats.total ? fmt.ms(stats.avgLatency) : card ? fmt.ms(card.latency.p50_ms) : "—"}
               hint={stats.total ? "Mean server time incl. reason codes" : "p50 benchmark at training"} />
       </div>
 
@@ -120,25 +106,16 @@ export function CommandCenter({ go }: { go: (route: Route) => void }) {
           {events.length ? (
             <div className="chart-box" style={{ height: 240 }}>
               <ResponsiveContainer>
-                <AreaChart data={timeline} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-                  <defs>
-                    {(["approve", "review", "block"] as const).map((key) => (
-                      <linearGradient key={key} id={`fill-${key}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={CHART[key]} stopOpacity={0.45} />
-                        <stop offset="100%" stopColor={CHART[key]} stopOpacity={0.02} />
-                      </linearGradient>
-                    ))}
-                  </defs>
+                <BarChart data={timeline} margin={{ top: 8, right: 8, left: -18, bottom: 0 }} barCategoryGap="22%">
                   <CartesianGrid stroke={CHART.grid} vertical={false} />
                   <XAxis dataKey="t" {...axisProps} tickFormatter={(t) => fmt.clock(t).slice(0, 5)} minTickGap={40} />
                   <YAxis {...axisProps} allowDecimals={false} />
                   <Tooltip {...tooltipProps} labelFormatter={(t) => fmt.clock(Number(t))} />
                   {(["approve", "review", "block"] as const).map((key) => (
-                    <Area key={key} type="monotone" dataKey={key} stackId="1" stroke={CHART[key]}
-                          strokeWidth={1.6} fill={`url(#fill-${key})`} name={DECISION_META[key].label}
-                          isAnimationActive={false} />
+                    <Bar key={key} dataKey={key} stackId="1" fill={CHART[key]} fillOpacity={0.85}
+                         name={DECISION_META[key].label} isAnimationActive={false} />
                   ))}
-                </AreaChart>
+                </BarChart>
               </ResponsiveContainer>
             </div>
           ) : (
