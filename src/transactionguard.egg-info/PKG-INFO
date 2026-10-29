@@ -1,286 +1,184 @@
 Metadata-Version: 2.4
 Name: transactionguard
-Version: 0.1.0
-Summary: Imbalanced Fraud Detection
-Author-email: Jules <jules@example.com>
+Version: 2.0.0
+Summary: Versioned fraud-scoring platform: model registry, calibrated risk scores, reason codes and drift monitoring
+Author: Dattu
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: pandas>=2.0.0
 Requires-Dist: numpy>=1.24.0
-Requires-Dist: scikit-learn>=1.3.0
+Requires-Dist: scikit-learn==1.9.1
+Requires-Dist: joblib>=1.3.0
 Requires-Dist: lightgbm>=4.0.0
-Requires-Dist: mlflow>=2.5.0
-Requires-Dist: fastapi>=0.100.0
-Requires-Dist: pydantic>=2.0.0
-Requires-Dist: uvicorn>=0.23.0
-Requires-Dist: matplotlib>=3.7.0
-Requires-Dist: seaborn>=0.12.0
 Requires-Dist: scipy>=1.10.0
+Requires-Dist: fastapi>=0.100.0
+Requires-Dist: python-multipart>=0.0.9
+Requires-Dist: pydantic>=2.0.0
 Requires-Dist: pydantic-settings>=2.0.0
+Requires-Dist: uvicorn>=0.23.0
+Requires-Dist: openpyxl>=3.1.0
 Provides-Extra: dev
 Requires-Dist: pytest>=7.0.0; extra == "dev"
 Requires-Dist: pytest-cov>=4.1.0; extra == "dev"
 Requires-Dist: ruff>=0.1.0; extra == "dev"
 Requires-Dist: httpx>=0.24.0; extra == "dev"
+Requires-Dist: mlflow>=2.5.0; extra == "dev"
 Requires-Dist: kaggle>=1.5.16; extra == "dev"
 Dynamic: license-file
 
-# TransactionGuard: Imbalanced Fraud Detection
+# TransactionGuard
 
-## 1. Project Overview
+**A fraud-scoring platform: versioned model registry, calibrated risk scores with approve / review / block decisions, per-transaction reason codes, drift monitoring and a real-time operations console.**
 
-**TransactionGuard** is an end-to-end machine learning system designed to detect potentially fraudulent financial transactions within highly imbalanced datasets. The system rigorously prevents data leakage, evaluates multiple classifiers based on Average Precision (PR-AUC), and sets classification thresholds driven by business costs. It includes an automated drift detection pipeline, and serves inferences via a fast, containerized API.
+| Layer | What it does |
+| --- | --- |
+| **Model registry** | Three model versions (v1 → v2 → v3) trained on the same split, evaluated on the same untouched test set, and promoted to *champion / challenger / baseline* automatically by validation PR-AUC. Each version ships a full model card. |
+| **Decision policy** | Two learned cut-offs per version: a cost-optimal **review** threshold and a ≥90%-precision **auto-block** threshold. A 0–100 risk score is anchored so 50 = review and 80 = block for every version. |
+| **Explainability** | Model-agnostic reason codes: each input is replaced by its training median and the change in fraud log-odds is reported. |
+| **Monitoring** | Population Stability Index for every input *and* for the model's own score, against training distributions, plus live service metrics. |
+| **API** | FastAPI service with single, batch, file-upload and champion-vs-challenger scoring, request IDs and timing headers. |
+| **Console** | React + TypeScript fraud-operations UI: Command Center, Live Monitor, Investigate, Batch Analysis, Model Registry, Monitoring, API docs. |
 
-## 2. Problem Statement and Class Imbalance
+---
 
-Fraud detection problems are fundamentally characterized by extreme class imbalance. In this scenario, legitimate transactions overwhelmingly outnumber fraudulent ones (often by 99.8% to 0.2%). Models evaluated purely on overall accuracy can appear highly performant while failing to detect any actual fraud.
+## Results
 
-This project tackles this by:
-* Using **Average Precision (PR-AUC)** as the primary selection metric.
-* Employing stratified splitting to preserve class proportions across training, validation, and untouched test sets.
-* Calculating class weights based solely on training data.
-* Using a validation dataset to pick the decision threshold that minimizes business costs, rather than relying on a default 0.5 threshold.
+Held-out test set (42,722 transactions, 90 fraud). Metrics at each version's own review threshold; costs use FN = $1,000, FP = $10.
 
-## 3. Architecture Diagram
+| Version | Model | PR-AUC | ROC-AUC | Recall | Fraud $ caught | Cost reduction | Stage |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| **v1** | Logistic regression, raw inputs | 0.507 | 0.974 | 83.3% | 91.4% | 72.6% | baseline |
+| **v2** | Random forest + behavioral features | 0.597 | 0.965 | 80.0% | 92.5% | 70.0% | challenger |
+| **v3** | Calibrated LightGBM + behavioral features | **0.800** | **0.989** | **94.4%** | **97.5%** | **88.7%** | **champion** |
+
+v3's auto-block band reaches **91% precision while catching 66% of fraud with no analyst involvement**; the remainder goes to a review queue of ~1.3% of traffic. Its Platt-calibrated probabilities track observed fraud rates (Brier 0.0008), which is what makes the threshold policy and risk score meaningful.
+
+> **About the data.** The original demo data shifted two features by 5σ, so every model scored a perfect 1.0 and versions could not be told apart. The bundled benchmark (`src/transactionguard/data/synthetic.py`) is deliberately harder: correlated heavy-tailed customer segments with a daily cycle, four fraud patterns (card testing, account takeover, a non-linear merchant-compromise ring, near-invisible stealth fraud) and suspicious-looking legitimate traffic. It uses the Kaggle credit-card schema, so the real dataset drops in unchanged. These are synthetic results, not evidence of real-world performance.
+
+---
+
+## Architecture
 
 ```mermaid
-graph TD;
-    A[Raw Data] --> B[Data Validation];
-    B --> C[Stratified Split];
-
-    C -->|Train Data| D[Feature Engineering];
-    C -->|Val Data| E[Threshold Optimization];
-    C -->|Test Data| F[Final Evaluation];
-
-    D --> G[Model Training LR, RF, LightGBM];
-
-    G --> H[MLflow Tracking];
-    E --> H;
-
-    H --> I[Artifacts Model, Scaler, Schema];
-
-    I --> J[FastAPI Service];
-    K[Client Request] --> J;
-    J --> L[Prediction];
-
-    M[Current Data] --> N[Drift Monitor];
-    A --> N;
+graph LR
+    D[(Transactions<br/>Time, V1–V28, Amount)] --> S[Stratified split<br/>70 / 15 / 15]
+    S --> T[Train v1 · v2 · v3]
+    S --> V[Validation:<br/>thresholds, champion selection]
+    S --> E[Test: model cards]
+    T & V & E --> R[(Registry<br/>artifacts/)]
+    R --> API[FastAPI service]
+    API --> UI[Operations console]
+    API --> M[PSI drift monitor]
 ```
 
-## 4. Technology Stack
-
-* **Python 3.11+**
-* **Data Processing & ML:** `pandas`, `numpy`, `scikit-learn`, `lightgbm`, `scipy`
-* **Tracking & Persistence:** `mlflow`, `joblib`
-* **API Service:** `fastapi`, `pydantic`, `uvicorn`
-* **Visualization:** `matplotlib`, `seaborn`
-* **Quality & CI:** `pytest`, `ruff`, GitHub Actions
-* **Deployment:** Docker, Docker Compose
-
-## 5. Repository Structure
-
 ```
-TransactionGuard/
-├── app/                  # FastAPI service implementation
-├── artifacts/            # Trained models and schemas (persisted here)
-├── data/                 # Raw, processed, and reference data
-├── mlruns/               # MLflow tracking data
-├── reports/              # Generated plots, metrics, and drift summaries
-├── scripts/              # CLI scripts for training, eval, and data loading
-├── src/transactionguard/ # Core reusable machine learning logic
-├── tests/                # Pytest unit and API test suite
-├── .github/workflows/    # CI/CD configurations
-├── Makefile              # Task runner
-├── Dockerfile            # Container configuration
-├── docker-compose.yml    # Service configuration
-└── pyproject.toml        # Dependency and tooling configs
+app/                    FastAPI service (api.py routes, schemas, telemetry)
+src/transactionguard/
+  data/                 loading, validation, stratified split, synthetic benchmark
+  features/             TransactionFeatureBuilder (time, amount, anomaly features)
+  models/               candidates (v1–v3), thresholds, evaluation, registry
+  monitoring/           PSI + KS drift
+  scoring.py            decision policy, risk score, reason codes
+  training.py           end-to-end training → registry
+artifacts/              published registry (models/, cards, drift reference, samples)
+frontend/               React + Vite operations console
+scripts/                train, evaluate, generate data, drift report
+tests/                  pytest suite (trains a small registry as a fixture)
 ```
 
-## 6. Dataset Source and Setup
+Every model version is one scikit-learn estimator over the raw input frame, so preprocessing cannot diverge between training and serving.
 
-The project is configured to use the [Kaggle Credit Card Fraud Detection](https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud) dataset.
+---
 
-### Manual Download (Recommended)
-1. Go to the dataset page above and download the archive.
-2. Extract the `creditcard.csv` file.
-3. Place `creditcard.csv` in `data/raw/creditcard.csv`.
+## Quick start
 
-### Using the CLI
-If you have your `kaggle.json` configured in your environment:
-```bash
-python scripts/download_data.py
-```
-
-### Synthetic Demo Data
-If the Kaggle dataset is unavailable, you can generate a synthetic substitute for smoke-testing:
-```bash
-make demo
-```
-
-## 7. Environment Setup
-
-### Linux / macOS
-```bash
-python3 -m venv venv
-source venv/bin/activate
-make setup
-```
-
-### Windows PowerShell
 ```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-pip install -e .[dev]
+pip install -r requirements-dev.txt
+pip install -e .
+
+uvicorn app.main:app --reload --port 8000      # API  → http://localhost:8000/docs
+cd frontend; npm install; npm run dev           # UI   → http://localhost:5173
 ```
 
-## 8. Training Commands
+The trained registry is committed under `artifacts/`, so the API works immediately. The frontend calls `http://localhost:8000/api` unless `VITE_API_BASE_URL` is set.
 
-The training pipeline loads data, validates it, splits it, runs feature engineering, trains three models (Logistic Regression, Random Forest, LightGBM), selects the optimal business threshold on validation data, logs to MLflow, and saves the best model artifacts.
+### Retrain
 
 ```bash
-make train
-# Or manually: MLFLOW_ALLOW_FILE_STORE=true PYTHONPATH=src python scripts/train.py
+python scripts/train.py --regenerate   # rebuild the synthetic benchmark, train all versions
+python scripts/train.py                # train on data/raw/creditcard.csv (e.g. the Kaggle file)
+python scripts/train.py --versions v3  # retrain a subset
+python scripts/evaluate.py             # re-score the test split → reports/leaderboard.json
 ```
 
-## 9. Evaluation Commands
+Training logs each version to MLflow (`mlflow.db`) when it is installed; pass `--no-mlflow` to skip.
 
-Evaluates the saved model artifact strictly on the held-out test partition.
-```bash
-make evaluate
-# Or manually: PYTHONPATH=src python scripts/evaluate.py
+---
+
+## API
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/predict?model=v3&explain=true` | Score one transaction → probability, risk score, decision, reason codes |
+| `POST` | `/api/predict/compare` | Score with every registered version |
+| `POST` | `/api/predict/batch` | Up to 5,000 JSON rows; evaluates against `Class` when present |
+| `POST` | `/api/predict/upload` | CSV / XLSX file, up to 20,000 rows / 25 MB |
+| `GET` | `/api/models`, `/api/models/{version}` | Registry index and full model cards |
+| `GET` | `/api/schema`, `/api/samples` | Feature statistics; held-out demo transactions |
+| `POST` | `/api/monitor/drift` | PSI report for a window of transactions |
+| `GET` | `/api/monitor/drift/simulate?scenario=` | `baseline`, `holiday_surge`, `fraud_ring`, `schema_shift` |
+| `GET` | `/api/metrics`, `/api/health`, `/health`, `/ready` | Service metrics and probes |
+
+```json
+POST /api/predict
+{ "transaction_id": "TX-100042", "Time": 7310, "V1": -1.36, "...": "...", "V28": 0.02, "Amount": 129.99 }
+
+{
+  "model_version": "v3",
+  "fraud_probability": 0.9946,
+  "risk_score": 99.9,
+  "risk_level": "critical",
+  "decision": "block",
+  "thresholds": { "review": 0.0087, "block": 0.3352 },
+  "reasons": [{ "feature": "V14", "value": -4.44, "baseline": 0.30, "contribution": 6.45, "direction": "increases_risk" }],
+  "latency_ms": 61.2
+}
 ```
 
-## 10. Threshold Optimization and Cost Assumptions
+Inputs are the 30 numeric columns `Time`, `V1`–`V28`, `Amount`. Extra columns (IDs, metadata) are preserved in batch results but never reach the model. Interactive docs live at `/docs`.
 
-Threshold selection does not default to 0.5. Instead, it minimizes a configurable cost function based on the validation set predictions:
-* **False Negative Cost (`FN_COST`):** Default 1000.0 (High cost of missing fraud).
-* **False Positive Cost (`FP_COST`):** Default 10.0 (Cost of investigating a legitimate user).
+---
 
-## 11. MLflow Startup and Inspection
+## How decisions are made
 
-Start the MLflow tracking UI to view experiments:
-```bash
-mlflow ui --backend-store-uri file://$(pwd)/mlruns
-```
-Then visit `http://127.0.0.1:5000`.
+1. **Thresholds are learned, never 0.5.** Every distinct validation score is tried as a cut-off and the one minimising `FN × $1,000 + FP × $10` becomes the review threshold. (The previous implementation only tried score percentiles, which forced it to flag at least 1% of traffic.)
+2. **Auto-block** is the lowest threshold whose validation precision reaches 90%.
+3. **Risk score** maps probability onto 0–100 piecewise in log space with anchors 1e-6 → 0, review → 50, block → 80, 1 → 100.
+4. **Reason codes** are computed for review/block rows in batches and for every single prediction.
 
-## 12. Drift-Report Generation
-
-Compares current data distributions to reference data using the KS-test.
-```bash
-make drift
-# Or manually: PYTHONPATH=src python scripts/generate_drift_report.py
-```
-Reports are output to `reports/drift_summary.json` and `reports/drift_features.csv`.
-
-## 13. API Startup Commands
-
-Run the FastAPI inference service locally:
-```bash
-make run-api
-```
-The API expects the model artifacts to be present in the `artifacts/` directory.
-
-## 14. Docker Build and Run
-
-To run the API reproducibly using Docker:
-```bash
-# Build
-make docker-build
-# Run
-make docker-run
-```
-Alternatively, using Docker Compose:
-```bash
-docker-compose up --build
-```
-
-## 15. Swagger Documentation
-
-Once the API is running, the interactive Swagger documentation is available at:
-`http://localhost:8000/docs`
-
-## 16. Example Request
+## Testing and quality
 
 ```bash
-curl -X 'POST' \
-  'http://localhost:8000/predict' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "Time": 0,
-  "V1": -1.359,
-  "V2": -0.072,
-  "V3": 2.536,
-  "V4": 1.378,
-  "V5": -0.338,
-  "V6": 0.462,
-  "V7": 0.239,
-  "V8": 0.098,
-  "V9": 0.363,
-  "V10": 0.090,
-  "V11": -0.551,
-  "V12": -0.617,
-  "V13": -0.991,
-  "V14": -0.311,
-  "V15": 1.468,
-  "V16": -0.470,
-  "V17": 0.207,
-  "V18": 0.025,
-  "V19": 0.403,
-  "V20": 0.251,
-  "V21": -0.018,
-  "V22": 0.277,
-  "V23": -0.110,
-  "V24": 0.066,
-  "V25": 0.128,
-  "V26": -0.189,
-  "V27": 0.133,
-  "V28": -0.021,
-  "Amount": 149.62
-}'
+pytest          # data, features, thresholds, scoring, drift, registry and API tests
+ruff check .
+npm --prefix frontend run build
 ```
 
-## 17. Testing Commands
+CI runs the Python lint and tests, checks that the committed registry loads, and builds the frontend.
 
-Run the full pytest suite:
-```bash
-make test
-# Or manually: PYTHONPATH=src:. pytest
-```
+## Deployment
 
-## 18. Measured Results Table (Synthetic Demo)
+- **API:** `Dockerfile` / `docker-compose.yml`, or any Python host (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`). Extra browser origins go in `CORS_ALLOWED_ORIGINS`.
+- **Frontend:** static Vite build (`npm run build` → `frontend/dist`) with `VITE_API_BASE_URL` pointing at the API.
 
-*Note: The following metrics were collected on the synthetic demo dataset.*
+## Limitations and responsible use
 
-| Metric                               | Result (Logistic Regression, Selected) |
-| ------------------------------------ | -------------------------------------: |
-| Validation Average Precision         |                                 1.0000 |
-| Test Average Precision               |                                 1.0000 |
-| Test ROC-AUC                         |                                 1.0000 |
-| Test Precision at selected threshold |                                 0.9875 |
-| Test Recall at selected threshold    |                                 1.0000 |
-| Test F1 at selected threshold        |                                 0.9937 |
-| False Positives                      |                                      1 |
-| False Negatives                      |                                      0 |
+- Demonstration project, not a certified banking system; all metrics come from synthetic data.
+- Costs are illustrative. Real deployments should set them from business data and keep humans on the review queue.
+- Telemetry is in-process and resets on restart; production would export to Prometheus or similar.
+- Uploaded transactions are scored in memory and never persisted or logged.
 
-*(Note: LightGBM achieved 0.9627 PR-AUC, Random Forest 1.0000 PR-AUC. Logistic Regression was selected as best based on the specific synthetic generation pattern.)*
-
-## 19. Limitations and Responsible Use
-
-* This is a demonstration project, **not a certified production banking system**.
-* False positives inconvenience legitimate customers; real deployments require manual review pipelines.
-* The explicit cost-matrix optimization utilizes illustrative defaults ($1000 per false negative, $10 per false positive). Real business costs vary wildly.
-* Sensitive transaction data must not be logged unnecessarily in the API.
-
-## 20. Troubleshooting
-
-* **Model Loading Errors (API):** Ensure you have run `make train` successfully so that artifacts exist in `./artifacts`.
-* **MLflow Errors:** If tracking fails, prefix commands with `MLFLOW_ALLOW_FILE_STORE=true`.
-* **ModuleNotFoundError:** Ensure your `PYTHONPATH` includes `src` and you've installed with `pip install -e .[dev]`.
-
-## 21. Reproducibility
-
-To perfectly reproduce the data split and model behaviors, the `transactionguard.config` module uses `RANDOM_STATE = 42`. Ensure that dependencies in `requirements.txt` remain appropriately constrained.
+License: MIT.
