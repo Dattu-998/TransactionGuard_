@@ -1,4 +1,4 @@
-import { Braces, Dices, FlaskConical, RotateCcw, ScanSearch, ShieldAlert, Sparkles } from "lucide-react";
+import { Braces, Dices, FlaskConical, RotateCcw, ScanSearch, ShieldAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { ReasonBars, RiskGauge } from "../components/charts";
@@ -104,7 +104,6 @@ export function Investigate() {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Operations"
         title="Investigate"
         description="Build or load a transaction, score it with reason codes, and see how every model version in the registry would decide."
         actions={
@@ -210,7 +209,7 @@ export function Investigate() {
 
           {prediction && (
             <Card title="Reason codes" subtitle="What moved the score, relative to a typical transaction">
-              <p className="narrative"><Sparkles size={14} /> {narrative(prediction.reasons)}</p>
+              <p className="narrative">{narrative(prediction.reasons)}</p>
               <ReasonBars reasons={prediction.reasons} />
               <Hint>Attribution replaces one input at a time with its training median and measures the change in fraud log-odds. It works identically for every model version.</Hint>
             </Card>

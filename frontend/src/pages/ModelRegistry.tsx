@@ -1,5 +1,5 @@
-import { ArrowRight, Boxes, Crown, GitBranch, SlidersHorizontal } from "lucide-react";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { ArrowRight, Boxes, GitBranch, SlidersHorizontal } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -40,7 +40,7 @@ export function ModelRegistry() {
   if (!registry) {
     return (
       <div className="page">
-        <PageHeader eyebrow="Models" title="Model Registry" description="Loading registry…" />
+        <PageHeader title="Model Registry" description="Loading registry…" />
         <div className="grid grid-3">{[0, 1, 2].map((i) => <span key={i} className="skeleton" style={{ height: 220 }} />)}</div>
       </div>
     );
@@ -49,7 +49,6 @@ export function ModelRegistry() {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Models"
         title="Model Registry"
         description={<>Every version is trained on the same split and evaluated on the same untouched test set. The champion is promoted by validation PR-AUC — not by hand.</>}
       />
@@ -62,13 +61,11 @@ export function ModelRegistry() {
               <button
                 type="button"
                 className={`version-card ${selected === v.version ? "is-selected" : ""} ${v.stage === "champion" ? "is-champion" : ""}`}
-                style={{ "--accent-v": versionColor(v.version) } as CSSProperties}
                 onClick={() => setSelected(v.version)}
               >
                 <div className="version-card-top">
                   <VersionTag version={v.version} />
                   <StageBadge stage={v.stage} />
-                  {v.stage === "champion" && <Crown size={15} className="crown" />}
                 </div>
                 <h3>{v.name}</h3>
                 <p className="muted small">{v.summary}</p>

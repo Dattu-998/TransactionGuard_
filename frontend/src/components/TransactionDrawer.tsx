@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { GitCompareArrows, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { DECISION_META, fmt, narrative } from "../lib/format";
+import { fmt, narrative } from "../lib/format";
 import { useStore } from "../store";
 import type { Comparison } from "../types";
 import { ReasonBars, RiskGauge } from "./charts";
@@ -68,7 +68,7 @@ export function TransactionDrawer() {
             </div>
 
             <div className="drawer-body">
-              <div className="drawer-verdict" style={{ borderColor: DECISION_META[p.decision].color }}>
+              <div className="drawer-verdict">
                 <RiskGauge score={p.risk_score} size={200} />
                 <div className="verdict-side">
                   <DecisionBadge decision={p.decision} />

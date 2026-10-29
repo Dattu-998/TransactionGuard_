@@ -1,44 +1,44 @@
 import type { Decision, RiskLevel, Stage } from "../types";
 
 export const DECISION_META: Record<Decision, { label: string; color: string; verb: string }> = {
-  approve: { label: "Approve", color: "#34d399", verb: "Approved" },
-  review: { label: "Review", color: "#fbbf24", verb: "Sent to review" },
-  block: { label: "Block", color: "#f87171", verb: "Blocked" },
+  approve: { label: "Approve", color: "#5fb98e", verb: "Approved" },
+  review: { label: "Review", color: "#d4a54a", verb: "Sent to review" },
+  block: { label: "Block", color: "#dc6b6b", verb: "Blocked" },
 };
 
 export const RISK_META: Record<RiskLevel, { label: string; color: string }> = {
-  low: { label: "Low", color: "#34d399" },
-  elevated: { label: "Elevated", color: "#a3e635" },
-  high: { label: "High", color: "#fbbf24" },
-  critical: { label: "Critical", color: "#f87171" },
+  low: { label: "Low", color: "#5fb98e" },
+  elevated: { label: "Elevated", color: "#a9ad6e" },
+  high: { label: "High", color: "#d4a54a" },
+  critical: { label: "Critical", color: "#dc6b6b" },
 };
 
 export const STAGE_META: Record<Stage, { label: string; color: string }> = {
-  champion: { label: "Champion", color: "#22d3ee" },
-  challenger: { label: "Challenger", color: "#a78bfa" },
-  archived: { label: "Baseline", color: "#94a3b8" },
+  champion: { label: "Champion", color: "#7d8fd9" },
+  challenger: { label: "Challenger", color: "#a1a1aa" },
+  archived: { label: "Baseline", color: "#63636b" },
 };
 
 export const VERSION_COLORS: Record<string, string> = {
-  v1: "#94a3b8",
-  v2: "#a78bfa",
-  v3: "#22d3ee",
+  v1: "#6b6b74",
+  v2: "#a1a1aa",
+  v3: "#7d8fd9",
 };
 
-export const versionColor = (version: string) => VERSION_COLORS[version] ?? "#60a5fa";
+export const versionColor = (version: string) => VERSION_COLORS[version] ?? "#8c8c95";
 
 export const CHART = {
-  grid: "rgba(148, 163, 184, 0.09)",
-  axis: "#6b7686",
-  text: "#9aa4b2",
-  tooltipBg: "#121821",
+  grid: "rgba(255, 255, 255, 0.06)",
+  axis: "#5e5e66",
+  text: "#8c8c95",
+  tooltipBg: "#18181b",
   approve: DECISION_META.approve.color,
   review: DECISION_META.review.color,
   block: DECISION_META.block.color,
-  accent: "#6d8cff",
-  cyan: "#22d3ee",
-  legit: "#5b7cfa",
-  fraud: "#f87171",
+  accent: "#7d8fd9",
+  cyan: "#7d8fd9",
+  legit: "#6b6b74",
+  fraud: "#dc6b6b",
 };
 
 export function riskColor(score: number): string {

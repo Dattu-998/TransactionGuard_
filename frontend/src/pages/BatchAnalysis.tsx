@@ -125,7 +125,6 @@ export function BatchAnalysis() {
   return (
     <div className="page">
       <PageHeader
-        eyebrow="Operations"
         title="Batch Analysis"
         description="Score a file of transactions in one call. Include a Class column (0/1) and the batch is evaluated against ground truth automatically."
         actions={
